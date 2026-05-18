@@ -1,0 +1,17 @@
+# KiCad local/user files
+*.kicad_prl
+*.kicad_pro-bak
+*.kicad_sch-bak
+*.kicad_pcb-bak
+*-backups/
+fp-info-cache
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.swp
+
+# Generated archives can be recreated from fabrication outputs
+*.zip
