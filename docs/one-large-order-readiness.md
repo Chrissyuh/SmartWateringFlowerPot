@@ -80,6 +80,7 @@ Order-readiness purchasing BOM:
 
 - `fabrication/bom/total-bom-5-sets.csv`
 - `docs/total-bom-5-sets.md`
+- Cost-reduction options: `docs/bom-cost-reduction-options.md`
 
 Current 5-system BOM estimate before shipping, tax, tariffs, tools, and enclosure materials:
 
