@@ -4,51 +4,54 @@ Date: 2026-05-19
 
 ## Status
 
-Do not order yet.
+CAD package ready for manufacturer preview.
 
-Board B is still electrically and fabrication clean. Board A is still the blocker for a combined order because the current PCB has four real unconnected items. I did not export Board A Gerbers, drill files, or STEP in this pass because that would create an orderable-looking package from a board that still fails DRC.
+Board A and Board B now both pass ERC, DRC, and schematic-parity checks with 0 violations and 0 unconnected pads. Board A Gerbers, drill files, STEP, schematic PDF, routing review files, and 3D review images were regenerated after the four open connections were fixed and zones were refilled.
 
-The current purchasing BOM is a readiness BOM, not a buy-now BOM. It locks practical part targets and supplier checks, but the quantities and supplier carts should be refreshed after Board A is DRC-clean.
+Do not check out the order until the Gerber zips are uploaded to the PCB manufacturer's viewer and visually inspected. The current purchasing BOM is still a readiness BOM: it locks practical part targets, but live supplier stock/prices and the mechanical warning items must be refreshed right before buying parts.
 
 ## Board A
 
 Current checks:
 
-- `reports/erc-one-large-order-board-a.txt`: 0 ERC messages, 0 errors, 0 warnings.
-- `reports/drc-one-large-order-board-a.txt`: 2 silkscreen warnings and 4 unconnected pads.
-- `reports/drc-one-large-order-board-a-parity.txt`: same DRC hold items; no separate schematic-parity mismatch was reported.
+- `reports/erc-order-batch-board-a.txt`: 0 violations.
+- `reports/drc-order-batch-board-a.txt`: 0 violations, 0 unconnected pads.
+- `reports/drc-order-batch-board-a-parity.txt`: 0 violations, 0 unconnected pads, 0 schematic parity issues.
 
-The four ordering blockers are:
+The four previous ordering blockers were fixed:
 
 - `R8` pad 1 to `Net-(J4-Pin_1)` reservoir switch signal.
 - `C4` pad 1 to `Net-(TP5-Pin_1)` optional moisture ADC filter/test node.
 - `R6` pad 2 to `Net-(J6-Pin_3)` SDA pullup branch.
 - `U1` pad 18 to `J6` pin 5 / `Net-(J6-Pin_5)` encoder A.
 
-I tried a scripted Board A route cleanup and reverted it because the lower connector area produced real DRC shorts and clearance issues. These four fixes should be done in KiCad PCB editor with visual routing, then zones should be refilled and DRC rerun.
+Board A package regenerated in this pass:
 
-Board A safe review outputs from this pass:
-
-- `outputs/BoardA_schematic_order_hold.pdf`
-- `outputs/BoardA_routing_ORDER_HOLD.svg`
-
-No Board A bare-PCB fab package was regenerated in this pass.
+- Gerbers: `fabrication/board_a/gerbers/`
+- Drill files and drill maps: `fabrication/board_a/drill/`
+- Fab zip: `fabrication/board_a/SmartWateringFlowerPot_board_a_fab.zip`
+- STEP: `mechanical/BoardA.step`
+- Schematic PDF: `outputs/BoardA_schematic_order_batch.pdf`
+- Routing review SVG/PDF: `outputs/BoardA_routing_order_batch.svg`, `outputs/BoardA_routing_order_batch.pdf`
+- 3D review images: `outputs/BoardA_3d_top.png`, `outputs/BoardA_3d_bottom.png`
 
 ## Board B
 
 Current checks:
 
-- `board_b_ui/reports/erc-one-large-order-board-b.txt`: 0 ERC messages, 0 errors, 0 warnings.
-- `board_b_ui/reports/drc-one-large-order-board-b.txt`: 0 DRC violations, 0 unconnected pads, 0 footprint errors.
-- `board_b_ui/reports/drc-one-large-order-board-b-parity.txt`: 0 DRC violations, 0 unconnected pads, 0 footprint errors.
+- `board_b_ui/reports/erc-order-batch-board-b.txt`: 0 violations.
+- `board_b_ui/reports/drc-order-batch-board-b.txt`: 0 violations, 0 unconnected pads.
+- `board_b_ui/reports/drc-order-batch-board-b-parity.txt`: 0 violations, 0 unconnected pads, 0 schematic parity issues.
 
-Board B package regenerated in this pass:
+Board B package refreshed in this pass:
 
 - Gerbers: `fabrication/board_b/gerbers/`
 - Drill files and drill maps: `fabrication/board_b/drill/`
+- Fab zip: `fabrication/board_b/BoardB_UI_fab.zip`
 - STEP: `board_b_ui/mechanical/BoardB_UI.step`
 - Schematic PDF: `board_b_ui/outputs/BoardB_UI_schematic.pdf`
 - Routing review SVG/PDF: `board_b_ui/outputs/BoardB_UI_routing.svg`, `board_b_ui/outputs/BoardB_UI_routing.pdf`
+- 3D review images: `board_b_ui/outputs/BoardB_UI_3d_top.png`, `board_b_ui/outputs/BoardB_UI_3d_bottom.png`
 
 Known acceptable Board B issue:
 
@@ -78,10 +81,8 @@ Live supplier findings captured in the purchasing BOM:
 
 Before ordering both boards and parts together:
 
-1. Fix the four Board A opens in KiCad PCB editor.
-2. Refill all copper zones.
-3. Run Board A ERC, DRC, and schematic parity clean.
-4. Regenerate Board A Gerbers, drills, STEP, schematic PDF, and routing review outputs only after Board A DRC reports 0 unconnected pads.
-5. Recheck Board A `J6` against Board B `J1`: `1=+3V3`, `2=GND`, `3=SDA`, `4=SCL`, `5=ENC_A`, `6=ENC_B`, `7=ENC_SW`, `8=ERROR_LED`, `9=STATUS_LED`.
-6. Upload both final Gerber zip packages to the PCB manufacturer's previewer and inspect outlines, holes, copper, silkscreen, and solder mask.
-7. Refresh the purchasing BOM prices and stock immediately before checkout.
+1. Upload both final Gerber zip packages to the PCB manufacturer's previewer and inspect outlines, holes, copper, silkscreen, and solder mask.
+2. Recheck Board A `J6` against Board B `J1`: `1=+3V3`, `2=GND`, `3=SDA`, `4=SCL`, `5=ENC_A`, `6=ENC_B`, `7=ENC_SW`, `8=ERROR_LED`, `9=STATUS_LED`.
+3. In KiCad 3D viewer or the enclosure CAD, confirm Board B back-side cable direction, OLED fit, encoder clearance, LED visibility, and mounting holes.
+4. Refresh the purchasing BOM prices and stock immediately before checkout.
+5. Resolve the remaining BOM warning items: L1 footprint fit, JST stocked equivalents, OLED pin order, EC11 shaft/panel clearance, reservoir switch geometry, and optional flow-sensor level safety.

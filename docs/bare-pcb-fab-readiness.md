@@ -4,47 +4,36 @@ Date: 2026-05-19
 
 ## Status
 
-Board B is fab-ready for bare PCB ordering after the front-panel placement cleanup.
+Board A and Board B are both fab-ready for bare PCB manufacturer preview.
 
-Board A is not fab-ready yet. ERC is clean and schematic parity is clean, but DRC still reports four real unconnected items. Do not order Board A until these are fixed in KiCad PCB editor and DRC is rerun clean.
+Board A now passes ERC, DRC, and schematic parity with 0 violations and 0 unconnected pads after the four open connections were fixed and copper zones were refilled. Board B remains clean after the front-panel placement cleanup and refreshed fabrication export.
 
-One-large-order readiness status is tracked in `docs/one-large-order-readiness.md`. The current purchasing BOM is `fabrication/bom/order-readiness-purchasing-bom.csv`; it is a readiness BOM, not a buy-now BOM while Board A is still blocked.
+One-large-order readiness status is tracked in `docs/one-large-order-readiness.md`. The current purchasing BOM is `fabrication/bom/order-readiness-purchasing-bom.csv`; it still needs a live stock/price refresh before parts checkout.
 
-## Board A Hold Items
+## Board A Fab-Ready Outputs
 
 Current reports:
 
-- `reports/erc-board-a-final-pass.txt`: 0 violations.
-- `reports/drc-board-a-final-pass-parity.txt`: 0 schematic parity issues, with Board A still showing the same DRC opens.
-- `reports/drc-board-a-final-pass.txt`: 4 unconnected items plus 2 silkscreen warnings.
-- `reports/erc-one-large-order-board-a.txt`: 0 ERC messages, 0 errors, 0 warnings.
-- `reports/drc-one-large-order-board-a.txt`: 4 unconnected items plus 2 silkscreen warnings.
-- `reports/drc-one-large-order-board-a-parity.txt`: same DRC hold items; no separate schematic-parity mismatch was reported.
+- `reports/erc-order-batch-board-a.txt`: 0 violations.
+- `reports/drc-order-batch-board-a.txt`: 0 violations, 0 unconnected pads.
+- `reports/drc-order-batch-board-a-parity.txt`: 0 violations, 0 unconnected pads, 0 schematic parity issues.
 
-Open routing/placement items:
+Fixed routing/placement items:
 
 - `R8` pad 1 to `Net-(J4-Pin_1)` reservoir switch signal.
 - `C4` pad 1 to `Net-(TP5-Pin_1)` optional moisture ADC filter node.
 - `R6` pad 2 to `Net-(J6-Pin_3)` SDA pullup branch.
 - `U1` pad 18 to `J6` pin 5 / `Net-(J6-Pin_5)` encoder A.
 
-Recommended Board A GUI fix:
+Board A bare-board output package:
 
-1. Route `U1` pad 18 to `J6` pin 5 first. This is the hardest channel because the nearby `J6` pin 6 route and USB-related routes block simple script routes.
-2. Move `R6` closer to `J6` pin 3 and `+3V3`, or place it on the back side if it clears courtyard/assembly constraints.
-3. Move `R8` near `J4`/`J5` and connect pad 1 to reservoir signal and pad 2 to nearby `+3V3`.
-4. Move `C4` beside `R10` or route its pad 1 to the existing moisture ADC series node.
-5. Refill zones and rerun DRC with schematic parity.
-
-A scratch scripted routing attempt was not applied because the dense lower connector area produced real shorts during DRC. Keep these four fixes as a GUI routing task.
-
-Board A review artifacts:
-
-- `outputs/BoardA_schematic_fab_review.pdf`
-- `outputs/BoardA_routing_HOLD.svg`
-- `outputs/BoardA_routing_HOLD.png`
-- `outputs/BoardA_schematic_order_hold.pdf`
-- `outputs/BoardA_routing_ORDER_HOLD.svg`
+- Gerbers: `fabrication/board_a/gerbers/`
+- Drill files and drill maps: `fabrication/board_a/drill/`
+- Fab zip: `fabrication/board_a/SmartWateringFlowerPot_board_a_fab.zip`
+- STEP: `mechanical/BoardA.step`
+- Schematic PDF: `outputs/BoardA_schematic_order_batch.pdf`
+- Routing review SVG/PDF: `outputs/BoardA_routing_order_batch.svg`, `outputs/BoardA_routing_order_batch.pdf`
+- 3D review images: `outputs/BoardA_3d_top.png`, `outputs/BoardA_3d_bottom.png`
 
 ## Board B Fab-Ready Outputs
 
@@ -56,6 +45,9 @@ Checks:
 - `board_b_ui/reports/erc-one-large-order-board-b.txt`: 0 ERC messages, 0 errors, 0 warnings.
 - `board_b_ui/reports/drc-one-large-order-board-b.txt`: 0 DRC violations, 0 unconnected items.
 - `board_b_ui/reports/drc-one-large-order-board-b-parity.txt`: 0 DRC violations, 0 unconnected items.
+- `board_b_ui/reports/erc-order-batch-board-b.txt`: 0 violations.
+- `board_b_ui/reports/drc-order-batch-board-b.txt`: 0 violations, 0 unconnected items.
+- `board_b_ui/reports/drc-order-batch-board-b-parity.txt`: 0 violations, 0 unconnected items, 0 schematic parity issues.
 
 Bare-board output package:
 
@@ -65,6 +57,8 @@ Bare-board output package:
 - Schematic PDF: `board_b_ui/outputs/BoardB_UI_schematic.pdf`
 - Routing review: `board_b_ui/outputs/BoardB_UI_routing.svg`
 - Routing review PDF: `board_b_ui/outputs/BoardB_UI_routing.pdf`
+- Fab zip: `fabrication/board_b/BoardB_UI_fab.zip`
+- 3D review images: `board_b_ui/outputs/BoardB_UI_3d_top.png`, `board_b_ui/outputs/BoardB_UI_3d_bottom.png`
 
 Known acceptable Board B warning during STEP export:
 
@@ -72,13 +66,12 @@ Known acceptable Board B warning during STEP export:
 
 ## Order Checklist
 
-Do not order both boards together yet.
+Before ordering both boards together:
 
-Order Board B only if the physical OLED module pin order is confirmed as `GND, VCC, SCL, SDA`, and the back-side right-angle 9-pin JST cable direction is checked in KiCad 3D viewer against the enclosure/front-panel plan.
-
-Hold Board A until:
-
-- `reports/drc-fab-board-a.txt` reports 0 errors and 0 unconnected items.
-- `reports/drc-fab-board-a-parity.txt` reports 0 schematic parity issues.
-- The `J6` pinout is visually rechecked against Board B `J1`:
+- Upload both final Gerber zip files to the PCB manufacturer's previewer.
+- Inspect board outline, holes, copper, solder mask, silkscreen, and pin-1 marks for both boards.
+- Visually recheck Board A `J6` against Board B `J1`:
   `1=+3V3`, `2=GND`, `3=SDA`, `4=SCL`, `5=ENC_A`, `6=ENC_B`, `7=ENC_SW`, `8=ERROR_LED`, `9=STATUS_LED`.
+- Confirm Board B back-side right-angle 9-pin JST cable direction in 3D view against the enclosure/front-panel plan.
+- Confirm the physical OLED module pin order is `GND, VCC, SCL, SDA`.
+- Refresh the purchasing BOM live before checking out parts.

@@ -9,13 +9,13 @@
   },
   "GeneralSpecs": {
     "ProjectId": {
-      "Name": "BoardB_UI",
-      "GUID": "426f6172-6442-45f5-9549-2e6b69636164",
+      "Name": "SmartWateringFlowerPot",
+      "GUID": "536d6172-7457-4617-9465-72696e67466c",
       "Revision": "rev?"
     },
     "Size": {
-      "X": 64.05,
-      "Y": 38.05
+      "X": 61.94,
+      "Y": 80.99
     },
     "LayerNumber": 2,
     "BoardThickness": 1.6,
@@ -27,54 +27,54 @@
       "PadToPad": 0.2,
       "PadToTrack": 0.2,
       "TrackToTrack": 0.2,
-      "MinLineWidth": 0.25,
-      "TrackToRegion": 0.25,
-      "RegionToRegion": 0.25
+      "MinLineWidth": 0.2,
+      "TrackToRegion": 0.2,
+      "RegionToRegion": 0.2
     }
   ],
   "FilesAttributes": [
     {
-      "Path": "BoardB_UI-F_Cu.gbr",
+      "Path": "SmartWateringFlowerPot-F_Cu.gbr",
       "FileFunction": "Copper,L1,Top",
       "FilePolarity": "Positive"
     },
     {
-      "Path": "BoardB_UI-B_Cu.gbr",
+      "Path": "SmartWateringFlowerPot-B_Cu.gbr",
       "FileFunction": "Copper,L2,Bot",
       "FilePolarity": "Positive"
     },
     {
-      "Path": "BoardB_UI-F_Paste.gbr",
+      "Path": "SmartWateringFlowerPot-F_Paste.gbr",
       "FileFunction": "SolderPaste,Top",
       "FilePolarity": "Positive"
     },
     {
-      "Path": "BoardB_UI-B_Paste.gbr",
+      "Path": "SmartWateringFlowerPot-B_Paste.gbr",
       "FileFunction": "SolderPaste,Bot",
       "FilePolarity": "Positive"
     },
     {
-      "Path": "BoardB_UI-F_Silkscreen.gbr",
+      "Path": "SmartWateringFlowerPot-F_Silkscreen.gbr",
       "FileFunction": "Legend,Top",
       "FilePolarity": "Positive"
     },
     {
-      "Path": "BoardB_UI-B_Silkscreen.gbr",
+      "Path": "SmartWateringFlowerPot-B_Silkscreen.gbr",
       "FileFunction": "Legend,Bot",
       "FilePolarity": "Positive"
     },
     {
-      "Path": "BoardB_UI-F_Mask.gbr",
+      "Path": "SmartWateringFlowerPot-F_Mask.gbr",
       "FileFunction": "SolderMask,Top",
       "FilePolarity": "Negative"
     },
     {
-      "Path": "BoardB_UI-B_Mask.gbr",
+      "Path": "SmartWateringFlowerPot-B_Mask.gbr",
       "FileFunction": "SolderMask,Bot",
       "FilePolarity": "Negative"
     },
     {
-      "Path": "BoardB_UI-Edge_Cuts.gbr",
+      "Path": "SmartWateringFlowerPot-Edge_Cuts.gbr",
       "FileFunction": "Profile",
       "FilePolarity": "Positive"
     }
