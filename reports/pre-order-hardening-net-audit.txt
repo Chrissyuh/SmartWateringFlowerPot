@@ -1,0 +1,54 @@
+Pre-order hardening PCB net audit
+Generated from KiCad PCB files; this is a design-data audit, not a substitute for visual Gerber review.
+
+Board A programming and USB
+- J1: USB-C 5V + USB2 | Connector_USB:USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal | F.Cu | 75.28,111.54 mm
+- U1: ESP32-S3-WROOM-1-N8 | RF_Module:ESP32-S3-WROOM-1 | F.Cu | 80.73,84.48 mm
+- J7: DEBUG 3V3/GND/TX/RX/EN/BOOT | Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical | F.Cu | 106.85,100.75 mm
+  J1 VBUS pads A4/A9/B4/B9: +5V, +5V, +5V, +5V
+  J1 D- / D+: Net-(U1-USB_D-) / Net-(U1-USB_D+)
+  U1 USB_D- / USB_D+: pad13=Net-(U1-USB_D-), pad14=Net-(U1-USB_D+)
+  J7 backup header: 1=+3V3, 2=GND, 3=Net-(J7-Pin_3), 4=Net-(J7-Pin_4), 5=Net-(J7-Pin_5), 6=Net-(J7-Pin_6)
+
+Board A power and pump
+- U2: AP63203WU-7 | Package_TO_SOT_SMD:TSOT-23-6 | F.Cu | 111.38,58.60 mm
+- L1: 3.9uH shielded >=3A Isat | Inductor_SMD:L_Bourns_SRN6045TA | F.Cu | 109.28,85.58 mm
+- C1: 10uF 10V X7R input | Capacitor_SMD:C_0805_2012Metric | F.Cu | 111.37,99.96 mm
+- C2: 22uF 6.3V X7R output | Capacitor_SMD:C_0805_2012Metric | F.Cu | 111.37,102.97 mm
+- C5: 22uF 6.3V X7R output | Capacitor_SMD:C_0805_2012Metric | F.Cu | 111.37,112.00 mm
+- C6: 100uF 10V pump bulk | Capacitor_THT:CP_Radial_D6.3mm_P2.50mm | F.Cu | 108.07,77.88 mm
+- J2: PUMP 5V | Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical | F.Cu | 98.58,101.83 mm
+- Q1: AO3400A | Package_TO_SOT_SMD:SOT-23 | F.Cu | 111.26,63.05 mm
+- D1: SS34 flyback | Diode_SMD:D_SMA | F.Cu | 109.33,91.63 mm
+- R4: 220R gate | Resistor_SMD:R_0805_2012Metric | F.Cu | 62.82,107.73 mm
+- R5: 100k pulldown | Resistor_SMD:R_0805_2012Metric | F.Cu | 62.82,110.68 mm
+  U2 power: VIN pads 2/3=+5V/+5V; OUT pad1=+3V3; GND pad4=GND
+  Pump connector J2: pin1=+5V, pin2=Net-(D1-A)
+  Pump switch Q1: gate=Net-(Q1-G), source=GND, drain=Net-(D1-A)
+  Flyback D1: cathode/pad1=+5V, anode/pad2=Net-(D1-A)
+  Pump gate network: R4 pad1=Net-(U1-IO4), R4 pad2=Net-(Q1-G); R5 pad2=GND
+
+Board A to Board B UI cable parity
+  pin 1: Board A J6=+3V3; Board B J1=/+3V3
+  pin 2: Board A J6=GND; Board B J1=/GND
+  pin 3: Board A J6=Net-(J6-Pin_3); Board B J1=/SDA
+  pin 4: Board A J6=Net-(J6-Pin_4); Board B J1=/SCL
+  pin 5: Board A J6=Net-(J6-Pin_5); Board B J1=/ENC_A
+  pin 6: Board A J6=Net-(J6-Pin_6); Board B J1=/ENC_B
+  pin 7: Board A J6=Net-(J6-Pin_7); Board B J1=/ENC_SW
+  pin 8: Board A J6=Net-(J6-Pin_8); Board B J1=/ERROR_LED
+  pin 9: Board A J6=Net-(J6-Pin_9); Board B J1=/STATUS_LED
+
+Board B UI interface
+  J2 OLED: 1=/GND, 2=/+3V3, 3=/SCL, 4=/SDA
+  SW1 encoder: A=/ENC_A, B=/ENC_B, C=/GND, S1=/ENC_SW, S2=/GND
+
+Hardening observations
+- Native USB data and backup J7 boot/debug path are present in PCB net data.
+- Pump is switched low-side; ESP32 GPIO only drives the MOSFET gate through a resistor and pulldown.
+- USB-C CC resistors are sink-identification resistors only; they do not limit pump or ESP current.
+- No dedicated USB input fuse/current limiter or USB data ESD array was found in placed Board A parts.
+- No added board-level ESP32 local bulk capacitor near U1 was found beyond the regulator output capacitors and module internal capacitance.
+
+Result
+CAD checks remain clean. Ordering decision should depend on accepting Rev A without fuse/ESD/local U1 bulk ECO, plus strict bring-up current limiting and pump-disconnected first flash.

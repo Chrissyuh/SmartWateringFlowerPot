@@ -28,10 +28,12 @@ Primary goals:
 
 Current status:
 
-- A new KiCad project has been created.
-- This handover file should live in the KiCad project root.
-- Schematic and PCB are likely still early or blank.
-- The next major job is to build the schematic intentionally, not rush routing.
+- Board A main-controller schematic and PCB are complete enough for manufacturer preview.
+- Board B UI daughterboard schematic and PCB are complete enough for manufacturer preview.
+- Both boards have current clean ERC, DRC, and schematic-parity reports.
+- Fabrication packages, STEP exports, schematic PDFs, routing review outputs, and 3D review images have been generated.
+- `docs/pre-order-hardening-review.md` documents the remaining real-world prototype tradeoffs: Rev A has no USB input fuse/current limiter, no USB data ESD array, and no extra local ESP32 bulk capacitor directly beside U1.
+- The next major job is not more routing. It is final Gerber preview, final live BOM refresh, explicit acceptance of the Rev A protection tradeoff, and then careful bring-up after boards arrive.
 
 ---
 
@@ -1034,4 +1036,3 @@ organize -> inspect -> warn -> generate checklists -> run checks -> explain erro
 ## Immediate next step
 
 After this file is placed in the KiCad project root, create `AGENTS.md` using the recommended content above, then open the project folder in the Codex app and run the first Codex prompt.
-

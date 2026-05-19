@@ -4,11 +4,13 @@ Date: 2026-05-19
 
 ## Status
 
-CAD package ready for manufacturer preview.
+CAD package ready for manufacturer preview, with pre-order hardening notes added.
 
 Board A and Board B now both pass ERC, DRC, and schematic-parity checks with 0 violations and 0 unconnected pads. Board A Gerbers, drill files, STEP, schematic PDF, routing review files, and 3D review images were regenerated after the four open connections were fixed and zones were refilled.
 
 Do not check out the order until the Gerber zips are uploaded to the PCB manufacturer's viewer and visually inspected. The current purchasing BOM is still a readiness BOM: it locks practical part targets, but live supplier stock/prices and the mechanical warning items must be refreshed right before buying parts.
+
+The hardening review did not find a CAD-clean blocker. It did identify prototype constraints that must be accepted before ordering Rev A: no USB input fuse/current limiter, no USB data ESD array, and no extra board-level ESP32 bulk capacitor directly beside U1. See `docs/pre-order-hardening-review.md`.
 
 ## Board A
 
@@ -17,6 +19,9 @@ Current checks:
 - `reports/erc-order-batch-board-a.txt`: 0 violations.
 - `reports/drc-order-batch-board-a.txt`: 0 violations, 0 unconnected pads.
 - `reports/drc-order-batch-board-a-parity.txt`: 0 violations, 0 unconnected pads, 0 schematic parity issues.
+- `reports/erc-hardening-board-a.txt`: 0 violations.
+- `reports/drc-hardening-board-a.txt`: 0 violations, 0 unconnected pads.
+- `reports/drc-hardening-board-a-parity.txt`: 0 violations, 0 unconnected pads, 0 schematic parity issues.
 
 The four previous ordering blockers were fixed:
 
@@ -42,6 +47,9 @@ Current checks:
 - `board_b_ui/reports/erc-order-batch-board-b.txt`: 0 violations.
 - `board_b_ui/reports/drc-order-batch-board-b.txt`: 0 violations, 0 unconnected pads.
 - `board_b_ui/reports/drc-order-batch-board-b-parity.txt`: 0 violations, 0 unconnected pads, 0 schematic parity issues.
+- `board_b_ui/reports/erc-hardening-board-b.txt`: 0 violations.
+- `board_b_ui/reports/drc-hardening-board-b.txt`: 0 violations, 0 unconnected pads.
+- `board_b_ui/reports/drc-hardening-board-b-parity.txt`: 0 violations, 0 unconnected pads, 0 schematic parity issues.
 
 Board B package refreshed in this pass:
 
@@ -76,6 +84,8 @@ Live supplier findings captured in the purchasing BOM:
 - The L1 candidate is electrically reasonable, but its body is 6.0 mm x 6.0 mm and must be checked against the current `Inductor_SMD:L_Bourns_SRN6045TA` footprint before ordering.
 - The OLED module is not locked until the actual module pin order is visually confirmed as `GND, VCC, SCL, SDA`.
 - Do not buy a 12 V pump for the current board. Board A switches USB 5 V, so use a small 3 V to 5 V or 5 V pump only.
+- Buy a dedicated 5 V, >=2 A USB adapter or USB power bank for pump tests. Do not run the pump from a laptop USB port.
+- Buy a real USB-C data cable and a 3.3 V USB-UART adapter for fallback flashing through J7.
 
 ## Final Order Gate
 
@@ -86,3 +96,4 @@ Before ordering both boards and parts together:
 3. In KiCad 3D viewer or the enclosure CAD, confirm Board B back-side cable direction, OLED fit, encoder clearance, LED visibility, and mounting holes.
 4. Refresh the purchasing BOM prices and stock immediately before checkout.
 5. Resolve the remaining BOM warning items: L1 footprint fit, JST stocked equivalents, OLED pin order, EC11 shaft/panel clearance, reservoir switch geometry, and optional flow-sensor level safety.
+6. Explicitly accept the Rev A protection tradeoff documented in `docs/pre-order-hardening-review.md`, or stop and make a Rev A.1 ECO for USB fuse/ESD/local ESP32 bulk capacitance.

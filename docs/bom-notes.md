@@ -7,7 +7,7 @@ This is a planning BOM, not a final purchasing list. Confirm exact part numbers,
 | Function | Preferred part / style | Notes |
 |---|---|---|
 | MCU | ESP32-S3-WROOM-1-N8 | Module, not dev board. Confirm footprint and antenna keepout. |
-| Input power | USB-C 5V sink | Include CC resistors if using a bare receptacle. |
+| Input power | USB-C 5V sink | Include CC resistors if using a bare receptacle. Use a dedicated 5 V, >=2 A USB adapter or power bank for pump operation. |
 | 3.3V regulator | AP63203WU-7 | Check datasheet layout, inductor, feedback, and package. |
 | Buck inductor | 3.9uH shielded power inductor | Confirm saturation current, DCR, pad fit, and height. |
 | Buck output caps | 2 x 22uF 6.3V X7R 0805 | Place both close to the AP63203 output path. |
@@ -22,11 +22,12 @@ This is a planning BOM, not a final purchasing list. Confirm exact part numbers,
 | Connectors | JST-XH preferred | Confirm pitch, footprint, current, and cable orientation. |
 | Passives | 0805 | Easier hand soldering. |
 | Debug | Test pads / UART header | Include `+5V`, `+3V3`, `GND`, `EN`, `BOOT`, `TXD`, `RXD`, `PUMP_GATE`, `MOISTURE_ADC`, `I2C_SDA`, `I2C_SCL`. |
+| Bench accessories | USB-C data cable, 3.3 V USB-UART adapter, current-limited 5 V source | Needed for safe first flash and fallback programming. Never use 5 V UART logic. |
 
 ## Required BOM Categories
 
 - USB-C receptacle and CC resistors.
-- Input protection: optional polyfuse and/or TVS if selected.
+- Input protection: optional polyfuse and/or TVS if selected. Rev A does not include these parts, so accept that risk before ordering or make a Rev A.1 ECO.
 - Bulk input capacitance for pump transients.
 - Buck regulator, inductor, input capacitor, two output capacitors, and bootstrap capacitor.
 - ESP32 module and support parts for EN/BOOT/programming.
@@ -55,6 +56,8 @@ This is a planning BOM, not a final purchasing list. Confirm exact part numbers,
 ## Unknowns To Resolve
 
 - Exact pump current draw and stall/startup behavior.
+- Whether to accept Rev A without USB input fuse/current limiting and USB ESD protection.
+- Whether ESP32 brownout testing requires a Rev A.1 local U1 bulk capacitor.
 - Exact moisture sensor module pin order and output range.
 - Exact OLED module pin order.
 - Whether UI is on the main PCB or a cabled daughterboard.
