@@ -8,7 +8,7 @@ CAD package ready for manufacturer preview, with pre-order hardening notes added
 
 Board A and Board B now both pass ERC, DRC, and schematic-parity checks with 0 violations and 0 unconnected pads. Board A Gerbers, drill files, STEP, schematic PDF, routing review files, and 3D review images were regenerated after the four open connections were fixed and zones were refilled.
 
-Do not check out the order until the Gerber zips are uploaded to the PCB manufacturer's viewer and visually inspected. The current purchasing BOM is still a readiness BOM: it locks practical part targets, but live supplier stock/prices and the mechanical warning items must be refreshed right before buying parts.
+Do not check out the order until the Gerber zips are uploaded to the PCB manufacturer's viewer and visually inspected. The purchasing BOM now has a 5-system minimum-buy estimate in `fabrication/bom/total-bom-5-sets.csv`, but cart totals still need one last checkout refresh for shipping, taxes, tariffs, and supplier stock.
 
 The hardening review did not find a CAD-clean blocker. It did identify prototype constraints that must be accepted before ordering Rev A: no USB input fuse/current limiter, no USB data ESD array, and no extra board-level ESP32 bulk capacitor directly beside U1. See `docs/pre-order-hardening-review.md`.
 
@@ -34,11 +34,11 @@ Board A package regenerated in this pass:
 
 - Gerbers: `fabrication/board_a/gerbers/`
 - Drill files and drill maps: `fabrication/board_a/drill/`
-- Fab zip: `fabrication/board_a/SmartWateringFlowerPot_board_a_fab.zip`
-- STEP: `mechanical/BoardA.step`
-- Schematic PDF: `outputs/BoardA_schematic_order_batch.pdf`
-- Routing review SVG/PDF: `outputs/BoardA_routing_order_batch.svg`, `outputs/BoardA_routing_order_batch.pdf`
-- 3D review images: `outputs/BoardA_3d_top.png`, `outputs/BoardA_3d_bottom.png`
+- Fab zip: `fabrication/board_a/Self-Watering_Flower_Pot_Board_A_fab.zip`
+- STEP: `mechanical/Self-Watering_Flower_Pot_Board_A.step`
+- Schematic PDF: `outputs/Self-Watering_Flower_Pot_Board_A_schematic.pdf`
+- Routing review SVG/PDF: `outputs/Self-Watering_Flower_Pot_Board_A_routing.svg`, `outputs/Self-Watering_Flower_Pot_Board_A_routing.pdf`
+- 3D review images: `outputs/Self-Watering_Flower_Pot_Board_A_3d_top.png`, `outputs/Self-Watering_Flower_Pot_Board_A_3d_bottom.png`
 
 ## Board B
 
@@ -55,11 +55,11 @@ Board B package refreshed in this pass:
 
 - Gerbers: `fabrication/board_b/gerbers/`
 - Drill files and drill maps: `fabrication/board_b/drill/`
-- Fab zip: `fabrication/board_b/BoardB_UI_fab.zip`
-- STEP: `board_b_ui/mechanical/BoardB_UI.step`
-- Schematic PDF: `board_b_ui/outputs/BoardB_UI_schematic.pdf`
-- Routing review SVG/PDF: `board_b_ui/outputs/BoardB_UI_routing.svg`, `board_b_ui/outputs/BoardB_UI_routing.pdf`
-- 3D review images: `board_b_ui/outputs/BoardB_UI_3d_top.png`, `board_b_ui/outputs/BoardB_UI_3d_bottom.png`
+- Fab zip: `fabrication/board_b/Self-Watering_UI_Board_B_fab.zip`
+- STEP: `board_b_ui/mechanical/Self-Watering_UI_Board_B.step`
+- Schematic PDF: `board_b_ui/outputs/Self-Watering_UI_Board_B_schematic.pdf`
+- Routing review SVG/PDF: `board_b_ui/outputs/Self-Watering_UI_Board_B_routing.svg`, `board_b_ui/outputs/Self-Watering_UI_Board_B_routing.pdf`
+- 3D review images: `board_b_ui/outputs/Self-Watering_UI_Board_B_3d_top.png`, `board_b_ui/outputs/Self-Watering_UI_Board_B_3d_bottom.png`
 
 Known acceptable Board B issue:
 
@@ -75,6 +75,17 @@ Generated KiCad BOM exports:
 Order-readiness purchasing BOM:
 
 - `fabrication/bom/order-readiness-purchasing-bom.csv`
+
+5-system minimum-buy BOM:
+
+- `fabrication/bom/total-bom-5-sets.csv`
+- `docs/total-bom-5-sets.md`
+
+Current 5-system BOM estimate before shipping, tax, tariffs, tools, and enclosure materials:
+
+- $275.10 including 5 power supplies, bench USB-C cable, fallback USB-UART adapter, and mounting hardware kits.
+- $205.10 without power supplies and mounting hardware.
+- $191.10 without power supplies, mounting hardware, bench USB-C cable, and USB-UART adapter.
 
 Live supplier findings captured in the purchasing BOM:
 

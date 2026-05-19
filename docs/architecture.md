@@ -1,8 +1,8 @@
-# Smart Watering Flower Pot V2 Architecture
+# Self-Watering Flower Pot V2 Architecture
 
 ## Rev A Goal
 
-Rev A is a reliable embedded/mechatronics prototype for a smart self-watering plant pot. It uses an ESP32-S3 module, a custom PCB, clean connectorized wiring, a protected low-side pump driver, calibrated moisture sensing, a local OLED/encoder UI, and clear fault signaling.
+Rev A is a reliable embedded/mechatronics prototype for a self-watering flower pot. It uses an ESP32-S3 module, a custom PCB, clean connectorized wiring, a protected low-side pump driver, calibrated moisture sensing, a local OLED/encoder UI, and clear fault signaling.
 
 The first build uses a hybrid workflow: Codex prepares documentation, checks, reports, and exports; KiCad GUI remains the source of truth for schematic placement, PCB placement, routing, board outline, and enclosure-sensitive mechanical decisions.
 

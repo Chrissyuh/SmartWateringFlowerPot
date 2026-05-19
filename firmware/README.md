@@ -1,4 +1,4 @@
-# Smart Pot V2 Firmware Notes
+# Self-Watering Flower Pot V2 Firmware Notes
 
 Firmware is not implemented yet. The hardware should support this behavior:
 

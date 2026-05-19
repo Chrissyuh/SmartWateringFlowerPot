@@ -1,6 +1,6 @@
-# Smart Watering Flower Pot V2
+# Self-Watering Flower Pot V2
 
-KiCad project for a Smart Self-Watering Plant Pot Rev A prototype.
+KiCad project for a Self-Watering Flower Pot V2 Rev A prototype.
 
 The project uses a hybrid workflow:
 - KiCad GUI is the source of truth for visual schematic and PCB work.
@@ -9,10 +9,11 @@ The project uses a hybrid workflow:
 
 ## Current State
 
-- KiCad project exists and is intentionally early/blank.
+- Board A main-controller PCB and Board B UI PCB are ready for manufacturer preview.
 - `CODEX_HANDOVER.md` is the main design context.
-- Initial ERC report passes because the schematic is blank.
-- Initial DRC reports the expected blank-board issue: no `Edge.Cuts` outline exists yet.
+- Current ERC, DRC, and schematic-parity reports are clean for both boards.
+- The current 5-system minimum-buy BOM estimate is in `docs/total-bom-5-sets.md`.
+- Final checkout is still gated by PCB manufacturer previews, live BOM stock/price refresh, and mechanical fit checks.
 
 ## Useful Commands
 
@@ -22,6 +23,6 @@ The project uses a hybrid workflow:
 & 'C:\Users\chesk\AppData\Local\Programs\KiCad\9.0\bin\kicad-cli.exe' pcb drc --format report --output 'reports\drc.txt' 'SmartWateringFlowerPot.kicad_pcb'
 ```
 
-## Next Manual KiCad Step
+## Next Manual Order Step
 
-Use `docs/schematic-planning.md`, `docs/pinout.md`, and `docs/bom-notes.md` to start placing schematic symbols in KiCad GUI. Do not start routing until the schematic has assigned footprints and ERC has been reviewed.
+Upload the Board A and Board B fab zips to the PCB manufacturer's previewer, inspect every layer, and verify the live purchasing BOM before checkout.

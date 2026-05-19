@@ -4619,7 +4619,7 @@
 		)
 		(embedded_fonts no)
 	))
-	(text "Smart Pot V2 Rev A - first schematic draft"
+	(text "Self-Watering Flower Pot V2 Rev A"
 		(at 20.32 12.7 0)
 		(effects
 				(font

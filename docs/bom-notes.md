@@ -1,6 +1,6 @@
-# Smart Pot V2 BOM Notes
+# Self-Watering Flower Pot V2 BOM Notes
 
-This is a planning BOM, not a final purchasing list. Confirm exact part numbers, footprints, voltage ratings, current ratings, and availability before ordering.
+This is a planning BOM, not a final purchasing list. Confirm exact part numbers, footprints, voltage ratings, current ratings, and availability before ordering. The current 5-system minimum-buy estimate is in `docs/total-bom-5-sets.md` and `fabrication/bom/total-bom-5-sets.csv`.
 
 ## Preferred Rev-A Parts
 

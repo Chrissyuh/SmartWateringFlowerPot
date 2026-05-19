@@ -1,8 +1,8 @@
-# Smart Self-Watering Plant Pot V2 — Codex + KiCad Handover
+# Self-Watering Flower Pot V2 — Codex + KiCad Handover
 
 ## Purpose of this file
 
-This file is the main handover document for Codex while working inside the new KiCad project folder for the Smart Self-Watering Plant Pot V2.
+This file is the main handover document for Codex while working inside the KiCad project folder for the Self-Watering Flower Pot V2.
 
 Codex should treat this as project context, design intent, safety rules, and a task guide. KiCad GUI remains the source of truth for visual schematic/PCB work. Codex should mostly help with organization, checking, documentation, reports, symbol/footprint sanity review, small controlled edits, scripts, and manufacturing-output automation.
 
@@ -12,7 +12,7 @@ This project is not just a quick prototype. The goal is a product-ish engineerin
 
 ## Project summary
 
-Project name: **Smart Self-Watering Plant Pot V2**
+Project name: **Self-Watering Flower Pot V2**
 
 Core idea: An ESP32-based plant pot controller that reads a capacitive soil moisture sensor, decides when watering is needed, runs a small 5V pump through a MOSFET driver, optionally verifies water flow, displays status on a small OLED, and lets the user adjust/calibrate settings through a rotary encoder/button UI.
 
@@ -637,7 +637,7 @@ Codex should remind the user of these at the right times, especially before comm
 - Use thicker traces for pump/current paths.
 - Use 45-degree routing unless there is a reason not to.
 - Label connectors on silkscreen.
-- Add version text like `Smart Pot V2 Rev A` on silkscreen.
+- Add version text like `Self-Watering Flower Pot V2 Rev A` on silkscreen.
 - Export a 3D model and check in SolidWorks or KiCad 3D viewer.
 
 ### Manufacturing reminders
@@ -695,10 +695,10 @@ UI target:
 ## Suggested project folder structure
 
 ```text
-SmartPotV2/
-  SmartPotV2.kicad_pro
-  SmartPotV2.kicad_sch
-  SmartPotV2.kicad_pcb
+SelfWateringFlowerPotV2/
+  SelfWateringFlowerPotV2.kicad_pro
+  SelfWateringFlowerPotV2.kicad_sch
+  SelfWateringFlowerPotV2.kicad_pcb
   CODEX_HANDOVER.md
   AGENTS.md
   /docs
@@ -733,7 +733,7 @@ Create or update an `AGENTS.md` file in the project root with this content:
 ```md
 # KiCad Project Rules for Codex
 
-This is a KiCad PCB project for the Smart Self-Watering Plant Pot V2.
+This is a KiCad PCB project for the Self-Watering Flower Pot V2.
 
 Rules:
 - Do not blindly rewrite .kicad_sch or .kicad_pcb files.
@@ -758,7 +758,7 @@ Paste this into Codex while the KiCad project folder is open:
 ```text
 Read CODEX_HANDOVER.md and AGENTS.md first.
 
-This is a new KiCad project for the Smart Self-Watering Plant Pot V2. Do not edit schematic or PCB files yet.
+This is a new KiCad project for the Self-Watering Flower Pot V2. Do not edit schematic or PCB files yet.
 
 First tasks:
 1. Identify the KiCad project files in this folder.

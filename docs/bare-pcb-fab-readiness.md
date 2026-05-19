@@ -29,7 +29,7 @@ Board A bare-board output package:
 
 - Gerbers: `fabrication/board_a/gerbers/`
 - Drill files and drill maps: `fabrication/board_a/drill/`
-- Fab zip: `fabrication/board_a/SmartWateringFlowerPot_board_a_fab.zip`
+- Fab zip: `fabrication/board_a/Self-Watering_Flower_Pot_Board_A_fab.zip`
 - STEP: `mechanical/BoardA.step`
 - Schematic PDF: `outputs/BoardA_schematic_order_batch.pdf`
 - Routing review SVG/PDF: `outputs/BoardA_routing_order_batch.svg`, `outputs/BoardA_routing_order_batch.pdf`
@@ -57,7 +57,7 @@ Bare-board output package:
 - Schematic PDF: `board_b_ui/outputs/BoardB_UI_schematic.pdf`
 - Routing review: `board_b_ui/outputs/BoardB_UI_routing.svg`
 - Routing review PDF: `board_b_ui/outputs/BoardB_UI_routing.pdf`
-- Fab zip: `fabrication/board_b/BoardB_UI_fab.zip`
+- Fab zip: `fabrication/board_b/Self-Watering_UI_Board_B_fab.zip`
 - 3D review images: `board_b_ui/outputs/BoardB_UI_3d_top.png`, `board_b_ui/outputs/BoardB_UI_3d_bottom.png`
 
 Known acceptable Board B warning during STEP export:

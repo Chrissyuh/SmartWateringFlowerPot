@@ -1,6 +1,6 @@
 # KiCad Project Rules for Codex
 
-This is a KiCad PCB project for the Smart Self-Watering Plant Pot V2.
+This is a KiCad PCB project for the Self-Watering Flower Pot V2.
 
 Rules:
 - Do not blindly rewrite `.kicad_sch` or `.kicad_pcb` files.

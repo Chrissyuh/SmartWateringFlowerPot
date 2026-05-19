@@ -1,4 +1,4 @@
-# Smart Pot V2 Bring-Up Checklist
+# Self-Watering Flower Pot V2 Bring-Up Checklist
 
 Use this checklist after boards arrive. Do not connect the pump until power rails, MCU behavior, and MOSFET gate behavior have been checked.
 
@@ -13,7 +13,7 @@ Use this checklist after boards arrive. Do not connect the pump until power rail
 ## Before Soldering
 
 - Inspect PCB for fab defects, scratches, shorts, and missing mask.
-- Confirm board revision text says `Smart Pot V2 Rev A`.
+- Confirm board revision text says `Self-Watering Flower Pot V2 Rev A`.
 - Confirm USB-C footprint orientation.
 - Confirm ESP32 module orientation and antenna keepout.
 - Confirm diode polarity markings.

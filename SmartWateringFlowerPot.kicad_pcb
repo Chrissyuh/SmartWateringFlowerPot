@@ -8815,7 +8815,7 @@
 		(layer "Edge.Cuts")
 		(uuid "7418b6e7-3318-4787-b889-8f128b77d923")
 	)
-	(gr_text "{dblquote}Self Watering Flower Pot{dblquote}\nBy Christopher Heskett\nFor the TETC"
+	(gr_text "Self-Watering Flower Pot V2 Rev A\nBy Christopher Heskett\nFor the TETC"
 		(at 86.07 51.63 0)
 		(layer "F.SilkS")
 		(uuid "42862d55-463d-4e53-9fe4-45e02e14771c")

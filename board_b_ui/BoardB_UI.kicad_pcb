@@ -3302,7 +3302,7 @@
 			)
 		)
 	)
-	(gr_text "BOARD B UI"
+	(gr_text "Self-Watering UI"
 		(at 21 2 0)
 		(layer "F.SilkS")
 		(uuid "7dccca99-9a6b-4ebe-83f2-6f4305fa05f2")
