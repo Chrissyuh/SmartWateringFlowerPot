@@ -1,0 +1,10 @@
+** Drc report for SmartWateringFlowerPot.kicad_pcb **
+** Created on 2026-05-19T18:18:18-0500 **
+
+** Found 0 DRC violations **
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** End of Report **

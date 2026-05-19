@@ -9,10 +9,11 @@ The project uses a hybrid workflow:
 
 ## Current State
 
-- Board A main-controller PCB and Board B UI PCB are ready for manufacturer preview.
+- Current branch `codex/cost-down-board-a-only` is a cheaper Board-A-only first build.
+- Board A cost-down PCB is clean: ERC 0, DRC 0, unconnected 0, schematic parity 0.
+- Board B UI remains in the repo as a deferred optional board, but it is not part of this cost-down order.
 - `CODEX_HANDOVER.md` is the main design context.
-- Current ERC, DRC, and schematic-parity reports are clean for both boards.
-- The current 5-system minimum-buy BOM estimate is in `docs/total-bom-5-sets.md`.
+- The cost-down five-system minimum-buy BOM estimate is in `fabrication/bom/cost-down-5-sets.csv`.
 - Final checkout is still gated by PCB manufacturer previews, live BOM stock/price refresh, and mechanical fit checks.
 
 ## Useful Commands
@@ -25,4 +26,4 @@ The project uses a hybrid workflow:
 
 ## Next Manual Order Step
 
-Upload the Board A and Board B fab zips to the PCB manufacturer's previewer, inspect every layer, and verify the live purchasing BOM before checkout.
+Upload only the Board A cost-down fab zip to the PCB manufacturer's previewer, inspect every layer, and verify the live purchasing BOM before checkout.
