@@ -1,0 +1,34 @@
+** Drc report for SmartWateringFlowerPot.kicad_pcb **
+** Created on 2026-05-18T21:02:20-0500 **
+
+** Found 2 DRC violations **
+[silk_overlap]: Silkscreen overlap
+    Rule: board setup constraints silk; warning
+    @(56.8000 mm, 56.8000 mm): Rectangle on F.Silkscreen
+    @(89.9300 mm, 71.5800 mm): Segment of U1 on F.Silkscreen
+[silk_overlap]: Silkscreen overlap
+    Rule: board setup constraints silk; warning
+    @(71.5300 mm, 71.5800 mm): Segment of U1 on F.Silkscreen
+    @(56.8000 mm, 56.8000 mm): Rectangle on F.Silkscreen
+
+** Found 4 unconnected pads **
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(81.7150 mm, 98.2800 mm): Track [Net-(J4-Pin_1)] on F.Cu, length 0.4950 mm
+    @(66.3175 mm, 110.6800 mm): Pad 1 [Net-(J4-Pin_1)] of R8 on F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(110.4200 mm, 108.9900 mm): Pad 1 [Net-(TP5-Pin_1)] of C4 on F.Cu
+    @(87.4618 mm, 84.6082 mm): Track [Net-(TP5-Pin_1)] on B.Cu, length 11.5743 mm
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(64.6800 mm, 101.8300 mm): Track [Net-(J6-Pin_3)] on B.Cu, length 0.5304 mm
+    @(63.7325 mm, 113.6300 mm): Pad 2 [Net-(J6-Pin_3)] of R6 on F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(69.6800 mm, 101.8300 mm): PTH pad 5 [Net-(J6-Pin_5)] of J6
+    @(77.5550 mm, 96.9800 mm): Pad 18 [Net-(J6-Pin_5)] of U1 on F.Cu
+
+** Found 0 Footprint errors **
+
+** End of Report **

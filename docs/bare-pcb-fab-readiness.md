@@ -1,12 +1,14 @@
 # Bare-PCB Fab Readiness
 
-Date: 2026-05-18
+Date: 2026-05-19
 
 ## Status
 
 Board B is fab-ready for bare PCB ordering after the front-panel placement cleanup.
 
 Board A is not fab-ready yet. ERC is clean and schematic parity is clean, but DRC still reports four real unconnected items. Do not order Board A until these are fixed in KiCad PCB editor and DRC is rerun clean.
+
+One-large-order readiness status is tracked in `docs/one-large-order-readiness.md`. The current purchasing BOM is `fabrication/bom/order-readiness-purchasing-bom.csv`; it is a readiness BOM, not a buy-now BOM while Board A is still blocked.
 
 ## Board A Hold Items
 
@@ -15,6 +17,9 @@ Current reports:
 - `reports/erc-board-a-final-pass.txt`: 0 violations.
 - `reports/drc-board-a-final-pass-parity.txt`: 0 schematic parity issues, with Board A still showing the same DRC opens.
 - `reports/drc-board-a-final-pass.txt`: 4 unconnected items plus 2 silkscreen warnings.
+- `reports/erc-one-large-order-board-a.txt`: 0 ERC messages, 0 errors, 0 warnings.
+- `reports/drc-one-large-order-board-a.txt`: 4 unconnected items plus 2 silkscreen warnings.
+- `reports/drc-one-large-order-board-a-parity.txt`: same DRC hold items; no separate schematic-parity mismatch was reported.
 
 Open routing/placement items:
 
@@ -38,6 +43,8 @@ Board A review artifacts:
 - `outputs/BoardA_schematic_fab_review.pdf`
 - `outputs/BoardA_routing_HOLD.svg`
 - `outputs/BoardA_routing_HOLD.png`
+- `outputs/BoardA_schematic_order_hold.pdf`
+- `outputs/BoardA_routing_ORDER_HOLD.svg`
 
 ## Board B Fab-Ready Outputs
 
@@ -46,6 +53,9 @@ Checks:
 - `board_b_ui/reports/erc-board-b-front-panel.txt`: 0 violations.
 - `board_b_ui/reports/drc-board-b-front-panel.txt`: 0 violations, 0 unconnected items.
 - `board_b_ui/reports/drc-board-b-front-panel-parity.txt`: 0 violations, 0 unconnected items, 0 schematic parity issues.
+- `board_b_ui/reports/erc-one-large-order-board-b.txt`: 0 ERC messages, 0 errors, 0 warnings.
+- `board_b_ui/reports/drc-one-large-order-board-b.txt`: 0 DRC violations, 0 unconnected items.
+- `board_b_ui/reports/drc-one-large-order-board-b-parity.txt`: 0 DRC violations, 0 unconnected items.
 
 Bare-board output package:
 

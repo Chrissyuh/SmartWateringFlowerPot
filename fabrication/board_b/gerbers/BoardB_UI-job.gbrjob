@@ -5,7 +5,7 @@
       "Application": "Pcbnew",
       "Version": "9.0.7"
     },
-    "CreationDate": "2026-05-18T19:34:36-05:00"
+    "CreationDate": "2026-05-18T21:03:40-05:00"
   },
   "GeneralSpecs": {
     "ProjectId": {
@@ -34,37 +34,47 @@
   ],
   "FilesAttributes": [
     {
-      "Path": "BoardB_UI-F_Cu.gtl",
+      "Path": "BoardB_UI-F_Cu.gbr",
       "FileFunction": "Copper,L1,Top",
       "FilePolarity": "Positive"
     },
     {
-      "Path": "BoardB_UI-B_Cu.gbl",
+      "Path": "BoardB_UI-B_Cu.gbr",
       "FileFunction": "Copper,L2,Bot",
       "FilePolarity": "Positive"
     },
     {
-      "Path": "BoardB_UI-F_Silkscreen.gto",
+      "Path": "BoardB_UI-F_Paste.gbr",
+      "FileFunction": "SolderPaste,Top",
+      "FilePolarity": "Positive"
+    },
+    {
+      "Path": "BoardB_UI-B_Paste.gbr",
+      "FileFunction": "SolderPaste,Bot",
+      "FilePolarity": "Positive"
+    },
+    {
+      "Path": "BoardB_UI-F_Silkscreen.gbr",
       "FileFunction": "Legend,Top",
       "FilePolarity": "Positive"
     },
     {
-      "Path": "BoardB_UI-B_Silkscreen.gbo",
+      "Path": "BoardB_UI-B_Silkscreen.gbr",
       "FileFunction": "Legend,Bot",
       "FilePolarity": "Positive"
     },
     {
-      "Path": "BoardB_UI-F_Mask.gts",
+      "Path": "BoardB_UI-F_Mask.gbr",
       "FileFunction": "SolderMask,Top",
       "FilePolarity": "Negative"
     },
     {
-      "Path": "BoardB_UI-B_Mask.gbs",
+      "Path": "BoardB_UI-B_Mask.gbr",
       "FileFunction": "SolderMask,Bot",
       "FilePolarity": "Negative"
     },
     {
-      "Path": "BoardB_UI-Edge_Cuts.gm1",
+      "Path": "BoardB_UI-Edge_Cuts.gbr",
       "FileFunction": "Profile",
       "FilePolarity": "Positive"
     }
