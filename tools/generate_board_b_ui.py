@@ -664,6 +664,7 @@ def main() -> int:
     make_readme()
     make_schematic()
     make_board()
+    subprocess.run([sys.executable, str(ROOT / "tools" / "cleanup_board_b_front_panel.py")], check=True)
     run_checks()
     return 0
 

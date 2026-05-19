@@ -4,7 +4,7 @@ Date: 2026-05-18
 
 ## Status
 
-Board B is fab-ready for bare PCB ordering.
+Board B is fab-ready for bare PCB ordering after the front-panel placement cleanup.
 
 Board A is not fab-ready yet. ERC is clean and schematic parity is clean, but DRC still reports four real unconnected items. Do not order Board A until these are fixed in KiCad PCB editor and DRC is rerun clean.
 
@@ -12,9 +12,9 @@ Board A is not fab-ready yet. ERC is clean and schematic parity is clean, but DR
 
 Current reports:
 
-- `reports/erc-fab-board-a.txt`: 0 violations.
-- `reports/drc-fab-board-a-parity.txt`: 0 schematic parity issues.
-- `reports/drc-fab-board-a.txt`: 4 unconnected items plus 2 silkscreen warnings.
+- `reports/erc-board-a-final-pass.txt`: 0 violations.
+- `reports/drc-board-a-final-pass-parity.txt`: 0 schematic parity issues, with Board A still showing the same DRC opens.
+- `reports/drc-board-a-final-pass.txt`: 4 unconnected items plus 2 silkscreen warnings.
 
 Open routing/placement items:
 
@@ -31,6 +31,8 @@ Recommended Board A GUI fix:
 4. Move `C4` beside `R10` or route its pad 1 to the existing moisture ADC series node.
 5. Refill zones and rerun DRC with schematic parity.
 
+A scratch scripted routing attempt was not applied because the dense lower connector area produced real shorts during DRC. Keep these four fixes as a GUI routing task.
+
 Board A review artifacts:
 
 - `outputs/BoardA_schematic_fab_review.pdf`
@@ -41,9 +43,9 @@ Board A review artifacts:
 
 Checks:
 
-- `board_b_ui/reports/erc-board-b-fab.txt`: 0 violations.
-- `board_b_ui/reports/drc-board-b-fab.txt`: 0 violations, 0 unconnected items.
-- `board_b_ui/reports/drc-board-b-parity.txt`: 0 violations, 0 unconnected items, 0 schematic parity issues.
+- `board_b_ui/reports/erc-board-b-front-panel.txt`: 0 violations.
+- `board_b_ui/reports/drc-board-b-front-panel.txt`: 0 violations, 0 unconnected items.
+- `board_b_ui/reports/drc-board-b-front-panel-parity.txt`: 0 violations, 0 unconnected items, 0 schematic parity issues.
 
 Bare-board output package:
 
@@ -52,7 +54,7 @@ Bare-board output package:
 - STEP: `board_b_ui/mechanical/BoardB_UI.step`
 - Schematic PDF: `board_b_ui/outputs/BoardB_UI_schematic.pdf`
 - Routing review: `board_b_ui/outputs/BoardB_UI_routing.svg`
-- 3D render: `board_b_ui/outputs/BoardB_UI_top.png`
+- Routing review PDF: `board_b_ui/outputs/BoardB_UI_routing.pdf`
 
 Known acceptable Board B warning during STEP export:
 
@@ -62,7 +64,7 @@ Known acceptable Board B warning during STEP export:
 
 Do not order both boards together yet.
 
-Order Board B only if the physical OLED module pin order is confirmed as `GND, VCC, SCL, SDA`, and the right-angle 9-pin JST cable direction matches the enclosure plan.
+Order Board B only if the physical OLED module pin order is confirmed as `GND, VCC, SCL, SDA`, and the back-side right-angle 9-pin JST cable direction is checked in KiCad 3D viewer against the enclosure/front-panel plan.
 
 Hold Board A until:
 
