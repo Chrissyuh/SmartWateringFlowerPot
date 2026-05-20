@@ -26,6 +26,7 @@ This branch preserves `main` as the two-board OLED/encoder version and creates a
   - `TP9`: `GND`
   - `TP10`: `FLOW_PULSE`
 - Board outline, mounting holes, USB-C, ESP32-S3, AP63203 buck, pump connector, moisture connector, debug header, and pump driver power path are unchanged.
+- The Board A outline now includes a bottom-edge USB-C clearance notch so normal USB-C cable housings sit outside the PCB instead of colliding with the board.
 
 ## Firmware Defaults
 
@@ -59,6 +60,7 @@ Current result after the redesign:
 ## Ordering Notes
 
 - Upload only `Self-Watering_Flower_Pot_Board_A_cost_down_fab.zip` for this version.
+- Use the regenerated zip dated after the USB-C notch fix; older cost-down zips are superseded.
 - Do not order Board B for this branch.
 - Reservoir and flow parts are not required for the first cheap build.
 - Before checkout, refresh live supplier pricing and verify the generic moisture sensor pin order and output range.
