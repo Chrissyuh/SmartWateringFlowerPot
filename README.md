@@ -1,29 +1,109 @@
 # Self-Watering Flower Pot V2
 
-KiCad project for a Self-Watering Flower Pot V2 Rev A prototype.
+Custom ESP32-S3 controller hardware and bring-up firmware for a self-watering flower pot prototype.
 
-The project uses a hybrid workflow:
-- KiCad GUI is the source of truth for visual schematic and PCB work.
-- Codex creates documentation, checklists, reports, and export automation.
-- Direct edits to `.kicad_sch` or `.kicad_pcb` require prior explanation and explicit approval.
+This repository contains the KiCad design files, generated fabrication outputs, mechanical STEP exports, board renders, BOM notes, bring-up reports, and the first safe test firmware used on the assembled Board A prototype.
 
-## Current State
+![Board A render](outputs/Self-Watering_Flower_Pot_Board_A_cost_down_render_angle_1_top_left.png)
 
-- Current branch `codex/cost-down-board-a-only` is a cheaper Board-A-only first build.
-- Board A cost-down PCB is clean: ERC 0, DRC 0, unconnected 0, schematic parity 0.
-- Board B UI remains in the repo as a deferred optional board, but it is not part of this cost-down order.
-- `CODEX_HANDOVER.md` is the main design context.
-- The cost-down five-system minimum-buy BOM estimate is in `fabrication/bom/cost-down-5-sets.csv`.
-- Final checkout is still gated by PCB manufacturer previews, live BOM stock/price refresh, and mechanical fit checks.
+## Current Status
 
-## Useful Commands
+- Board A cost-down prototype has been fabricated and hand assembled for bring-up.
+- USB-C power, 3.3 V regulator, ESP32-S3 native USB flashing, status LEDs, and moisture ADC bring-up firmware have been tested.
+- Pump switching firmware is intentionally disabled until the MOSFET/pump driver bring-up is completed.
+- Board B UI daughterboard files remain in the repository as a deferred optional design.
+- The cost-down Board A fabrication package is available in `fabrication/board_a_cost_down/`.
 
-```powershell
-& 'C:\Users\chesk\AppData\Local\Programs\KiCad\9.0\bin\kicad-cli.exe' version
-& 'C:\Users\chesk\AppData\Local\Programs\KiCad\9.0\bin\kicad-cli.exe' sch erc --format report --output 'reports\erc.txt' 'SmartWateringFlowerPot.kicad_sch'
-& 'C:\Users\chesk\AppData\Local\Programs\KiCad\9.0\bin\kicad-cli.exe' pcb drc --format report --output 'reports\drc.txt' 'SmartWateringFlowerPot.kicad_pcb'
+## Hardware Overview
+
+Board A is the main controller board:
+
+- ESP32-S3-WROOM-1-N8 module
+- USB-C 5 V input
+- AP63203 buck regulator for the 3.3 V logic rail
+- Capacitive soil moisture sensor input on `J3`
+- AO3400A low-side pump MOSFET footprint with gate resistor and pulldown
+- SS34-style pump flyback diode
+- Red error LED and green status LED
+- Optional reservoir switch and flow pulse pads
+- Debug/programming backup header `J7`
+- Test points for rails and key signals
+
+Board B is a deferred UI daughterboard concept with OLED/encoder support.
+
+## Firmware
+
+The current bring-up firmware lives in `firmware/testcode1/`.
+
+It hosts a local Wi-Fi access point and web page:
+
+- SSID: `FlowerPot-testcode1`
+- Password: `flowerpot1`
+- URL: `http://192.168.4.1`
+
+The page shows moisture ADC readings, rolling average, min/max/span, rough wetness band, optional input short status, flow pulse count, and LED test buttons.
+
+Important safety rule: `GPIO4 / PUMP_GATE` is forced LOW at boot and again every loop. The firmware has no pump button and no pump-control endpoint.
+
+## Repository Map
+
+- `SmartWateringFlowerPot.kicad_pro`, `.kicad_sch`, `.kicad_pcb` - Board A KiCad project
+- `board_b_ui/` - deferred UI board KiCad project
+- `firmware/testcode1/` - PlatformIO bring-up firmware
+- `docs/` - design notes, pinout, BOM notes, bring-up checklist, and hardening review
+- `reports/` - saved ERC/DRC and audit reports
+- `outputs/` - schematic PDFs, routing PDFs/SVGs, reference images, and 3D renders
+- `fabrication/` - Gerbers, drill files, BOM CSVs, and fab zips
+- `mechanical/` - STEP exports for enclosure/mechanical fit checks
+- `CODEX_HANDOVER.md` - detailed project history and design context
+
+## Bring-Up Notes
+
+Before connecting a pump:
+
+- Verify `+5V`, `+3V3`, and `GND`.
+- Confirm there are no rail shorts.
+- Confirm the ESP32 flashes over USB.
+- Confirm `PUMP_GATE` remains LOW during boot/reset.
+- Test the MOSFET gate with the pump disconnected.
+- Use short, current-limited pump tests only after the MOSFET and flyback diode are verified.
+
+The moisture connector `J3` board order is:
+
+```text
+3V3  GND  SIG
 ```
 
-## Next Manual Order Step
+The common capacitive sensor mapping is:
 
-Upload only the Board A cost-down fab zip to the PCB manufacturer's previewer, inspect every layer, and verify the live purchasing BOM before checkout.
+```text
+VCC -> +3V3
+GND -> GND
+AOUT -> SIG
+```
+
+## Build Firmware
+
+From `firmware/testcode1/`:
+
+```powershell
+python -m platformio run
+python -m platformio run --target upload
+```
+
+The current `platformio.ini` targets the ESP32-S3 over `COM3`; change the port if your machine enumerates it differently.
+
+## KiCad Checks
+
+KiCad 9 is expected. If `kicad-cli` is on your PATH:
+
+```powershell
+kicad-cli sch erc --format report --output reports/erc.txt SmartWateringFlowerPot.kicad_sch
+kicad-cli pcb drc --format report --output reports/drc.txt SmartWateringFlowerPot.kicad_pcb
+```
+
+KiCad GUI remains the source of truth for visual PCB edits.
+
+## License
+
+This project is released under the MIT License. See `LICENSE`.

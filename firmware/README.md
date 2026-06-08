@@ -1,19 +1,39 @@
-# Self-Watering Flower Pot V2 Firmware Notes
+# Firmware
 
-Firmware is not implemented yet. The hardware should support this behavior:
+Firmware for the self-watering flower pot controller.
 
-- Initialize moisture input, optional sensor inputs, error/status LEDs, and pump output OFF at boot.
-- Read calibration/settings from nonvolatile memory.
-- Average moisture ADC readings and convert to calibrated moisture percentage.
-- Use hysteresis around the watering threshold.
-- Enforce cooldown after watering.
-- Enforce maximum pump runtime or maximum volume per watering event.
-- Default `RESERVOIR_SENSOR_ENABLED=false`.
-- Default `FLOW_SENSOR_ENABLED=false`.
-- Missing reservoir/flow hardware must not block watering unless explicitly enabled.
-- If a reservoir switch is enabled later, use the ESP32 internal pullup and switch to GND.
-- If a flow sensor is populated later, count pulses with an interrupt-capable GPIO and fault on no-flow.
-- Use green/status LED for normal state and pump activity.
-- Use red/error LED for fault state.
-- Use USB serial or compile-time constants for calibration/settings in the cost-down version.
-- Allow manual pump test only with a safety timeout.
+## Current Firmware
+
+The active bring-up firmware is `testcode1/`.
+
+It is intentionally conservative:
+
+- Forces `GPIO4 / PUMP_GATE` LOW at boot and every loop.
+- Provides no pump-control endpoint.
+- Hosts a local AP and diagnostic web UI.
+- Reads the moisture ADC continuously.
+- Tracks moisture raw, rolling average, min/max/span, and rough diagnostic band.
+- Shows live optional input short status for `TP6-TP7` and `TP10-TP9`.
+- Provides LED test buttons for the red and green board LEDs.
+
+## Build
+
+From `firmware/testcode1/`:
+
+```powershell
+python -m platformio run
+python -m platformio run --target upload
+```
+
+The current configuration uses `COM3`; update `platformio.ini` if the ESP32-S3 appears on another port.
+
+## Safety Direction
+
+Future pump firmware should add pump control only after hardware bring-up proves:
+
+- MOSFET orientation is correct.
+- `PUMP_GATE` is LOW during boot/reset.
+- Flyback diode orientation is correct.
+- Pump current is measured.
+- A hard maximum runtime is enforced.
+- Manual pump tests are short and explicit.
