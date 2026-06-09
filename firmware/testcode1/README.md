@@ -1,13 +1,17 @@
 # testcode1
 
-Safe bring-up firmware for the Board A cost-down hardware.
+Pump-test firmware for the Board A cost-down hardware.
+
+This firmware is for the first controlled pump trial after the MOSFET has been installed and checked. It is not final autonomous watering firmware.
 
 ## Safety behavior
 
-- GPIO4 `PUMP_GATE` is set `LOW` at boot and again every loop.
-- The web UI has no pump control.
-- The firmware has no pump-control API endpoint.
-- Use this firmware for USB, Wi-Fi AP, LED, moisture ADC, and optional input-pad checks only.
+- GPIO4 `PUMP_GATE` starts LOW at boot.
+- Pump control is unlocked, but every pump request is capped in firmware at `2000 ms`.
+- The pump endpoint accepts only `POST` and requires a confirmation token.
+- The web UI shows a first-use browser warning before running the pump button.
+- AP mode always stays enabled, even if the ESP32 joins home Wi-Fi.
+- Use a dedicated 5 V supply or USB power bank for pump tests. Do not run the pump from a laptop USB port.
 
 ## Pins
 
@@ -22,12 +26,15 @@ Safe bring-up firmware for the Board A cost-down hardware.
 
 ## Hosted UI
 
-- SSID: `FlowerPot-testcode1`
-- Password: `flowerpot1`
-- URL: `http://192.168.4.1`
+- AP SSID: `FlowerPot-testcode1`
+- AP password: `flowerpot1`
+- AP URL: `http://192.168.4.1`
 
 The UI shows:
 
+- pump ready/running state and remaining runtime
+- 2-second pump test button with first-use warning
+- home Wi-Fi settings form
 - moisture raw ADC value
 - rolling average
 - min/max/span since boot or reset
@@ -42,7 +49,16 @@ The UI shows:
 
 - `GET /api/status`
   - Keeps the original bring-up fields: `moisture_adc_raw`, `reservoir_sw_low`, `flow_input_low`, `flow_pulses`, and `pump`.
-  - Adds `version`, `moisture_adc_avg`, `moisture_adc_min`, `moisture_adc_max`, `moisture_adc_span`, `moisture_band`, and `samples`.
+  - Adds Wi-Fi state, pump state, moisture average/min/max/span, `moisture_band`, and sample count.
+- `POST /api/pump`
+  - Body must include `confirm=pump-test`.
+  - Optional `duration_ms` is accepted but clamped to `2000`.
+  - Returns HTTP `409` if the pump is already running.
+- `POST /api/wifi`
+  - Body fields: `ssid`, `password`.
+  - Saves credentials in ESP32 NVS and tries to join while keeping the AP online.
+- `POST /api/wifi/clear`
+  - Clears saved home Wi-Fi credentials.
 - `POST /api/flash?led=red|green|both`
   - Flashes the selected LED output for 5 seconds.
 - `POST /api/reset-stats`
@@ -71,10 +87,13 @@ Initial diagnostic bands in firmware:
 
 Do not use these as final watering thresholds without real soil calibration.
 
-## Verification on the first assembled board
+## First pump trial checklist
 
-- Flashed successfully on `COM3`.
-- ESP32-S3 booted `testcode1`.
-- Laptop connected to `FlowerPot-testcode1`.
-- `http://192.168.4.1/api/status` responded.
-- `/api/flash?led=both` accepted the LED test request.
+Before pressing the pump button:
+
+- MOSFET orientation checked.
+- `TP4 / PUMP_GATE` measured near `0 V` with the previous pump-disabled firmware.
+- Pump flyback diode polarity checked.
+- Pump connected to `J2` with correct polarity.
+- Board powered from a dedicated 5 V source or USB power bank, not a laptop USB port.
+- Water is kept away from the PCB.

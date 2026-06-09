@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <DNSServer.h>
+#include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -7,7 +8,7 @@
 namespace {
 
 constexpr char FIRMWARE_NAME[] = "testcode1";
-constexpr char FIRMWARE_VERSION[] = "sensor-ui-v2";
+constexpr char FIRMWARE_VERSION[] = "pump-test-v1";
 
 constexpr uint8_t PIN_MOISTURE_ADC = 1;
 constexpr uint8_t PIN_PUMP_GATE = 4;
@@ -18,7 +19,8 @@ constexpr uint8_t PIN_STATUS_LED = 16;
 
 constexpr bool LED_ON = HIGH;
 constexpr bool LED_OFF = LOW;
-constexpr bool PUMP_DISABLED = LOW;
+constexpr bool PUMP_OFF = LOW;
+constexpr bool PUMP_ON = HIGH;
 
 const char *AP_SSID = "FlowerPot-testcode1";
 const char *AP_PASSWORD = "flowerpot1";
@@ -31,8 +33,16 @@ constexpr uint32_t MOISTURE_SAMPLE_INTERVAL_MS = 250;
 constexpr uint8_t MOISTURE_AVG_WINDOW = 16;
 constexpr uint16_t ADC_MAX_VALUE = 4095;
 
+constexpr uint32_t PUMP_MAX_RUNTIME_MS = 2000;
+constexpr char PUMP_CONFIRM_TOKEN[] = "pump-test";
+
 WebServer server(80);
 DNSServer dnsServer;
+Preferences preferences;
+
+String savedStaSsid = "";
+String savedStaPassword = "";
+uint32_t staConnectStartedMs = 0;
 
 volatile uint32_t flowPulseCount = 0;
 
@@ -50,12 +60,58 @@ uint32_t ledTestUntilMs = 0;
 String ledTestMode = "";
 uint32_t reservoirLowStartedMs = 0;
 
+bool pumpRunning = false;
+uint32_t pumpStartedMs = 0;
+uint32_t pumpUntilMs = 0;
+uint32_t pumpPulseCount = 0;
+
 void IRAM_ATTR onFlowPulse() {
   flowPulseCount++;
 }
 
-void forcePumpDisabled() {
-  digitalWrite(PIN_PUMP_GATE, PUMP_DISABLED);
+void setPumpOff() {
+  pumpRunning = false;
+  pumpStartedMs = 0;
+  pumpUntilMs = 0;
+  digitalWrite(PIN_PUMP_GATE, PUMP_OFF);
+}
+
+void servicePumpSafety() {
+  const uint32_t now = millis();
+  if (pumpRunning && static_cast<int32_t>(now - pumpUntilMs) >= 0) {
+    setPumpOff();
+    return;
+  }
+  digitalWrite(PIN_PUMP_GATE, pumpRunning ? PUMP_ON : PUMP_OFF);
+}
+
+uint32_t pumpRemainingMs() {
+  if (!pumpRunning) {
+    return 0;
+  }
+  const uint32_t now = millis();
+  if (static_cast<int32_t>(pumpUntilMs - now) <= 0) {
+    return 0;
+  }
+  return pumpUntilMs - now;
+}
+
+bool startPumpPulse(uint32_t requestedMs) {
+  servicePumpSafety();
+  if (pumpRunning) {
+    return false;
+  }
+  if (requestedMs == 0 || requestedMs > PUMP_MAX_RUNTIME_MS) {
+    requestedMs = PUMP_MAX_RUNTIME_MS;
+  }
+
+  const uint32_t now = millis();
+  pumpRunning = true;
+  pumpStartedMs = now;
+  pumpUntilMs = now + requestedMs;
+  pumpPulseCount++;
+  digitalWrite(PIN_PUMP_GATE, PUMP_ON);
+  return true;
 }
 
 uint32_t readFlowPulseCount() {
@@ -165,12 +221,58 @@ String moistureBand() {
   return "wet";
 }
 
+String staStatusText() {
+  switch (WiFi.status()) {
+    case WL_CONNECTED:
+      return "connected";
+    case WL_NO_SSID_AVAIL:
+      return "ssid_not_found";
+    case WL_CONNECT_FAILED:
+      return "connect_failed";
+    case WL_CONNECTION_LOST:
+      return "connection_lost";
+    case WL_DISCONNECTED:
+      return savedStaSsid.length() ? "disconnected" : "not_configured";
+    case WL_IDLE_STATUS:
+      return "connecting";
+    default:
+      return "unknown";
+  }
+}
+
+void connectStaIfConfigured() {
+  if (savedStaSsid.length() == 0) {
+    return;
+  }
+  WiFi.begin(savedStaSsid.c_str(), savedStaPassword.c_str());
+  staConnectStartedMs = millis();
+}
+
+void loadWifiSettings() {
+  preferences.begin("flowerpot", false);
+  savedStaSsid = preferences.getString("sta_ssid", "");
+  savedStaPassword = preferences.getString("sta_pass", "");
+}
+
+void updateStaReconnect() {
+  if (savedStaSsid.length() == 0 || WiFi.status() == WL_CONNECTED) {
+    return;
+  }
+
+  const uint32_t now = millis();
+  if (staConnectStartedMs == 0 || now - staConnectStartedMs > 30000) {
+    connectStaIfConfigured();
+  }
+}
+
 String statusJson() {
+  servicePumpSafety();
   const bool reservoirLow = digitalRead(PIN_RESERVOIR_SW) == LOW;
   const bool flowLow = digitalRead(PIN_FLOW_PULSE) == LOW;
   const uint32_t now = millis();
   const uint32_t flowCount = readFlowPulseCount();
   const String band = moistureBand();
+  const String staStatus = staStatusText();
 
   String json = "{";
   json += "\"name\":\"" + String(FIRMWARE_NAME) + "\",";
@@ -179,7 +281,12 @@ String statusJson() {
   json += "\"mac\":\"" + WiFi.macAddress() + "\",";
   json += "\"ap_ssid\":\"" + String(AP_SSID) + "\",";
   json += "\"ap_ip\":\"" + WiFi.softAPIP().toString() + "\",";
+  json += "\"ap_clients\":" + String(WiFi.softAPgetStationNum()) + ",";
   json += "\"clients\":" + String(WiFi.softAPgetStationNum()) + ",";
+  json += "\"sta_configured\":" + String(savedStaSsid.length() ? "true" : "false") + ",";
+  json += "\"sta_ssid\":\"" + jsonEscape(savedStaSsid) + "\",";
+  json += "\"sta_status\":\"" + jsonEscape(staStatus) + "\",";
+  json += "\"sta_ip\":\"" + (WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : String("")) + "\",";
   json += "\"moisture_adc_raw\":" + String(moistureRaw) + ",";
   json += "\"moisture_adc_avg\":" + String(moistureAverage()) + ",";
   json += "\"moisture_adc_min\":" + String(moistureMinValue()) + ",";
@@ -190,7 +297,11 @@ String statusJson() {
   json += "\"reservoir_sw_low\":" + String(reservoirLow ? "true" : "false") + ",";
   json += "\"flow_input_low\":" + String(flowLow ? "true" : "false") + ",";
   json += "\"flow_pulses\":" + String(flowCount) + ",";
-  json += "\"pump\":\"disabled_in_testcode1\",";
+  json += "\"pump\":\"" + String(pumpRunning ? "running" : "ready_limited_2s") + "\",";
+  json += "\"pump_running\":" + String(pumpRunning ? "true" : "false") + ",";
+  json += "\"pump_remaining_ms\":" + String(pumpRemainingMs()) + ",";
+  json += "\"pump_max_runtime_ms\":" + String(PUMP_MAX_RUNTIME_MS) + ",";
+  json += "\"pump_pulses\":" + String(pumpPulseCount) + ",";
   json += "\"led_test\":\"" + jsonEscape(ledTestMode) + "\",";
   json += "\"led_test_remaining_ms\":" + String(ledTestUntilMs > now ? ledTestUntilMs - now : 0);
   json += "}";
@@ -200,31 +311,34 @@ String statusJson() {
 String pageHtml() {
   const String mac = WiFi.macAddress();
   String html;
-  html.reserve(11000);
+  html.reserve(16000);
   html += F("<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>");
   html += F("<title>Flower Pot testcode1</title>");
   html += F("<style>");
   html += F(":root{color-scheme:light}body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:#f6f7f2;color:#172018}");
-  html += F("main{max-width:900px;margin:0 auto;padding:18px}h1{font-size:26px;margin:0 0 6px}h2{font-size:18px;margin:18px 0 8px}");
+  html += F("main{max-width:960px;margin:0 auto;padding:18px}h1{font-size:26px;margin:0 0 6px}h2{font-size:18px;margin:18px 0 8px}");
   html += F(".sub{color:#526052;margin-bottom:14px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin:10px 0}");
   html += F(".card{background:white;border:1px solid #d7ddd2;border-radius:8px;padding:12px;min-height:72px}.k{font-size:12px;color:#66705f;text-transform:uppercase}.v{font-size:24px;font-weight:700;word-break:break-word}.small{font-size:14px;color:#53604f}");
   html += F("button{appearance:none;border:0;border-radius:6px;padding:12px 14px;margin:5px 5px 5px 0;font-weight:700;background:#245b3b;color:white}");
-  html += F("button.red{background:#9f2929}button.green{background:#27733e}button.gray{background:#555}");
+  html += F("button.red{background:#9f2929}button.green{background:#27733e}button.gray{background:#555}button.pump{background:#b33a22}button:disabled{opacity:.55}");
+  html += F("input{box-sizing:border-box;width:100%;max-width:360px;border:1px solid #b8c1b3;border-radius:6px;padding:10px;margin:4px 0 8px;font:inherit}");
   html += F(".warn{border-left:5px solid #b93a32;background:#fff;padding:12px;margin:14px 0}.ok{border-left:5px solid #27733e;background:#fff;padding:12px;margin:14px 0}");
   html += F(".band{display:inline-block;border-radius:999px;padding:4px 10px;background:#e8ece1;font-size:18px}.wet{background:#cfe8ff}.moist{background:#d8efcf}.dry-ish{background:#fff0bf}.very-dry{background:#ffd7c7}");
   html += F("code{background:#ecefe8;padding:2px 5px;border-radius:4px}pre{white-space:pre-wrap;background:#172018;color:#e9f0e5;padding:12px;border-radius:8px;overflow:auto;font-size:13px}");
   html += F("</style></head><body><main>");
   html += F("<h1>Flower Pot testcode1</h1>");
-  html += F("<div class='sub'>Safe sensor/UI firmware. AP-only. Pump output is intentionally disabled.</div>");
-  html += F("<div class='warn'><b>Pump disabled:</b> GPIO4 is held LOW continuously. This firmware has no pump control endpoint or button.</div>");
+  html += F("<div class='sub'>Pump-test firmware. AP always stays on. Pump is limited in firmware to a 2 second pulse.</div>");
+  html += F("<div class='warn'><b>Pump unlocked:</b> use a dedicated 5 V supply or power bank, not a laptop USB port. Firmware caps each pump run at 2000 ms.</div>");
 
-  html += F("<div><button class='red' onclick=\"flashLed('red')\">Flash red LED 5s</button>");
+  html += F("<div><button class='pump' id='pumpBtn' onclick='runPump()'>Run pump 2s</button>");
+  html += F("<button class='red' onclick=\"flashLed('red')\">Flash red LED 5s</button>");
   html += F("<button class='green' onclick=\"flashLed('green')\">Flash green LED 5s</button>");
   html += F("<button onclick=\"flashLed('both')\">Flash both 5s</button>");
   html += F("<button class='gray' onclick='resetStats()'>Reset stats</button>");
   html += F("<button class='gray' onclick='refreshStatus()'>Refresh</button></div>");
 
   html += F("<section class='grid'>");
+  html += F("<div class='card'><div class='k'>Pump</div><div class='v' id='pumpState'>...</div><div class='small' id='pumpRemaining'>...</div></div>");
   html += F("<div class='card'><div class='k'>Moisture raw</div><div class='v' id='moistureRaw'>...</div></div>");
   html += F("<div class='card'><div class='k'>Moisture avg</div><div class='v' id='moistureAvg'>...</div></div>");
   html += F("<div class='card'><div class='k'>Moisture band</div><div class='v'><span class='band' id='moistureBand'>...</span></div></div>");
@@ -238,25 +352,33 @@ String pageHtml() {
   html += F("<div class='card'><div class='k'>Samples</div><div class='v' id='sampleCount'>...</div></div>");
   html += F("</section>");
 
-  html += F("<section class='grid'>");
+  html += F("<h2>Network</h2><section class='grid'>");
   html += F("<div class='card'><div class='k'>AP SSID</div><div class='v'>");
   html += AP_SSID;
-  html += F("</div></div>");
-  html += F("<div class='card'><div class='k'>AP password</div><div class='v'>");
-  html += AP_PASSWORD;
-  html += F("</div></div>");
-  html += F("<div class='card'><div class='k'>Address</div><div class='v'>192.168.4.1</div></div>");
+  html += F("</div><div class='small'>AP URL: http://192.168.4.1</div></div>");
+  html += F("<div class='card'><div class='k'>Home Wi-Fi</div><div class='v' id='staStatus'>...</div><div class='small' id='staDetails'>...</div></div>");
   html += F("<div class='card'><div class='k'>MAC</div><div class='v'>");
   html += mac;
   html += F("</div></div>");
   html += F("</section>");
+
+  html += F("<div class='card'><h2>Settings</h2><form id='wifiForm' onsubmit='saveWifi(event)'>");
+  html += F("<label>Home Wi-Fi SSID<br><input name='ssid' id='ssidInput' autocomplete='off'></label><br>");
+  html += F("<label>Password<br><input name='password' type='password' autocomplete='current-password'></label><br>");
+  html += F("<button type='submit'>Connect ESP to home Wi-Fi</button>");
+  html += F("<button type='button' class='gray' onclick='clearWifi()'>Clear saved Wi-Fi</button>");
+  html += F("<div class='small' id='wifiMessage'></div></form></div>");
 
   html += F("<div class='ok'>Diagnostic bands are rough: higher ADC means drier. Use real soil readings before choosing watering thresholds.</div>");
   html += F("<h2>Status JSON</h2><pre id='status'>Loading...</pre>");
   html += F("<script>");
   html += F("function yn(v){return v?'SHORTED':'open'}");
   html += F("function bandClass(v){return String(v||'').replace(/ /g,'-')}");
+  html += F("function ms(v){return Math.max(0,Math.ceil(Number(v||0)))+' ms'}");
   html += F("async function refreshStatus(){try{const r=await fetch('/api/status',{cache:'no-store'});const s=await r.json();");
+  html += F("document.getElementById('pumpState').textContent=s.pump_running?'RUNNING':'ready';");
+  html += F("document.getElementById('pumpRemaining').textContent=s.pump_running?('remaining '+ms(s.pump_remaining_ms)):('max '+ms(s.pump_max_runtime_ms));");
+  html += F("document.getElementById('pumpBtn').disabled=!!s.pump_running;");
   html += F("document.getElementById('moistureRaw').textContent=s.moisture_adc_raw;");
   html += F("document.getElementById('moistureAvg').textContent=s.moisture_adc_avg;");
   html += F("const b=document.getElementById('moistureBand');b.textContent=s.moisture_band;b.className='band '+bandClass(s.moisture_band);");
@@ -266,10 +388,17 @@ String pageHtml() {
   html += F("document.getElementById('tp10State').textContent=yn(s.flow_input_low);");
   html += F("document.getElementById('flowPulseState').textContent=s.flow_pulses;");
   html += F("document.getElementById('sampleCount').textContent=s.samples;");
+  html += F("document.getElementById('staStatus').textContent=s.sta_status;");
+  html += F("document.getElementById('staDetails').textContent=s.sta_configured?(s.sta_ssid+(s.sta_ip?' at '+s.sta_ip:'')):'not configured';");
+  html += F("if(!document.getElementById('ssidInput').value&&s.sta_ssid){document.getElementById('ssidInput').value=s.sta_ssid}");
   html += F("document.getElementById('status').textContent=JSON.stringify(s,null,2)}catch(e){document.getElementById('status').textContent='Status read failed: '+e}}");
   html += F("async function flashLed(which){await fetch('/api/flash?led='+encodeURIComponent(which),{method:'POST'});refreshStatus()}");
   html += F("async function resetStats(){await fetch('/api/reset-stats',{method:'POST'});refreshStatus()}");
-  html += F("refreshStatus();setInterval(refreshStatus,2000);");
+  html += F("async function saveWifi(e){e.preventDefault();const fd=new FormData(e.target);const r=await fetch('/api/wifi',{method:'POST',body:new URLSearchParams(fd)});document.getElementById('wifiMessage').textContent=await r.text();setTimeout(refreshStatus,1000)}");
+  html += F("async function clearWifi(){const r=await fetch('/api/wifi/clear',{method:'POST'});document.getElementById('wifiMessage').textContent=await r.text();refreshStatus()}");
+  html += F("async function runPump(){if(!localStorage.getItem('pumpWarned')){const ok=confirm('First pump test warning: use a dedicated 5 V supply, keep water away from the board, confirm MOSFET/diode orientation, and expect only a 2 second pulse. Run pump now?');if(!ok)return;localStorage.setItem('pumpWarned','yes')}");
+  html += F("const r=await fetch('/api/pump',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'duration_ms=2000&confirm=pump-test'});if(!r.ok){alert(await r.text())}refreshStatus()}");
+  html += F("refreshStatus();setInterval(refreshStatus,1000);");
   html += F("</script></main></body></html>");
   return html;
 }
@@ -290,6 +419,62 @@ void resetStatsEndpoint() {
   lastMoistureSampleMs = millis();
   resetFlowPulseCount();
   server.send(200, "application/json", "{\"ok\":true}");
+}
+
+void pumpEndpoint() {
+  if (server.arg("confirm") != PUMP_CONFIRM_TOKEN) {
+    server.send(403, "text/plain", "Pump request rejected: missing confirmation token.");
+    return;
+  }
+
+  uint32_t requestedMs = PUMP_MAX_RUNTIME_MS;
+  if (server.hasArg("duration_ms")) {
+    const long parsed = server.arg("duration_ms").toInt();
+    if (parsed > 0) {
+      requestedMs = static_cast<uint32_t>(parsed);
+    }
+  }
+  if (requestedMs > PUMP_MAX_RUNTIME_MS) {
+    requestedMs = PUMP_MAX_RUNTIME_MS;
+  }
+
+  if (!startPumpPulse(requestedMs)) {
+    server.send(409, "text/plain", "Pump is already running.");
+    return;
+  }
+
+  String json = "{\"ok\":true,\"duration_ms\":";
+  json += String(requestedMs);
+  json += ",\"max_runtime_ms\":";
+  json += String(PUMP_MAX_RUNTIME_MS);
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+void saveWifiEndpoint() {
+  const String ssid = server.arg("ssid");
+  const String password = server.arg("password");
+  if (ssid.length() == 0) {
+    server.send(400, "text/plain", "SSID is required.");
+    return;
+  }
+
+  savedStaSsid = ssid;
+  savedStaPassword = password;
+  preferences.putString("sta_ssid", savedStaSsid);
+  preferences.putString("sta_pass", savedStaPassword);
+  connectStaIfConfigured();
+  server.send(200, "text/plain", "Saved. ESP is trying to join " + savedStaSsid + " while keeping the AP online.");
+}
+
+void clearWifiEndpoint() {
+  preferences.remove("sta_ssid");
+  preferences.remove("sta_pass");
+  savedStaSsid = "";
+  savedStaPassword = "";
+  staConnectStartedMs = 0;
+  WiFi.disconnect(false, false);
+  server.send(200, "text/plain", "Saved Wi-Fi cleared. AP remains online.");
 }
 
 void updateLeds() {
@@ -342,6 +527,15 @@ void setupWebServer() {
   server.on("/api/flash", HTTP_GET, []() {
     startLedTest(server.arg("led"));
   });
+  server.on("/api/pump", HTTP_POST, []() {
+    pumpEndpoint();
+  });
+  server.on("/api/wifi", HTTP_POST, []() {
+    saveWifiEndpoint();
+  });
+  server.on("/api/wifi/clear", HTTP_POST, []() {
+    clearWifiEndpoint();
+  });
   server.onNotFound([]() {
     server.sendHeader("Location", String("http://") + AP_IP.toString(), true);
     server.send(302, "text/plain", "");
@@ -353,7 +547,7 @@ void setupWebServer() {
 
 void setup() {
   pinMode(PIN_PUMP_GATE, OUTPUT);
-  forcePumpDisabled();
+  setPumpOff();
   pinMode(PIN_ERROR_LED, OUTPUT);
   pinMode(PIN_STATUS_LED, OUTPUT);
   digitalWrite(PIN_ERROR_LED, LED_OFF);
@@ -376,9 +570,10 @@ void setup() {
   Serial.print(FIRMWARE_NAME);
   Serial.print(" ");
   Serial.println(FIRMWARE_VERSION);
-  Serial.println("Pump is disabled in firmware.");
+  Serial.println("Pump test is enabled with a 2000 ms firmware cap.");
 
-  WiFi.mode(WIFI_AP);
+  loadWifiSettings();
+  WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
   WiFi.setTxPower(WIFI_POWER_19_5dBm);
   wifi_country_t country = {"US", 1, 11, WIFI_COUNTRY_POLICY_MANUAL};
@@ -387,6 +582,7 @@ void setup() {
   const bool apStarted = WiFi.softAP(AP_SSID, AP_PASSWORD, 1, false, 4);
   dnsServer.start(DNS_PORT, "*", AP_IP);
   setupWebServer();
+  connectStaIfConfigured();
 
   Serial.print("AP started: ");
   Serial.println(apStarted ? "yes" : "no");
@@ -398,13 +594,19 @@ void setup() {
   Serial.println(AP_PASSWORD);
   Serial.print("URL: http://");
   Serial.println(WiFi.softAPIP());
+  if (savedStaSsid.length()) {
+    Serial.print("Trying home Wi-Fi SSID: ");
+    Serial.println(savedStaSsid);
+  }
 }
 
 void loop() {
-  forcePumpDisabled();
+  servicePumpSafety();
   updateMoistureSampler();
+  updateStaReconnect();
   dnsServer.processNextRequest();
   server.handleClient();
   updateServicePad();
   updateLeds();
+  servicePumpSafety();
 }

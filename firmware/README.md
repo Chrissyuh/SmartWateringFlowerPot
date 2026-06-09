@@ -6,11 +6,13 @@ Firmware for the self-watering flower pot controller.
 
 The active bring-up firmware is `testcode1/`.
 
-It is intentionally conservative:
+It is a controlled pump-test build:
 
-- Forces `GPIO4 / PUMP_GATE` LOW at boot and every loop.
-- Provides no pump-control endpoint.
-- Hosts a local AP and diagnostic web UI.
+- Starts `GPIO4 / PUMP_GATE` LOW at boot.
+- Allows a web UI pump pulse only after a first-use browser warning.
+- Caps pump runtime in firmware at `2000 ms`.
+- Hosts a local AP at all times.
+- Can optionally join home Wi-Fi from the settings form while keeping the AP online.
 - Reads the moisture ADC continuously.
 - Tracks moisture raw, rolling average, min/max/span, and rough diagnostic band.
 - Shows live optional input short status for `TP6-TP7` and `TP10-TP9`.
@@ -27,9 +29,9 @@ python -m platformio run --target upload
 
 The current configuration uses `COM3`; update `platformio.ini` if the ESP32-S3 appears on another port.
 
-## Safety Direction
+## Pump Safety Direction
 
-Future pump firmware should add pump control only after hardware bring-up proves:
+The current firmware is still only for supervised testing. Future autonomous pump firmware should add watering control only after hardware bring-up proves:
 
 - MOSFET orientation is correct.
 - `PUMP_GATE` is LOW during boot/reset.

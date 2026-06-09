@@ -9,8 +9,8 @@ This repository contains the KiCad design files, generated fabrication outputs, 
 ## Current Status
 
 - Board A cost-down prototype has been fabricated and hand assembled for bring-up.
-- USB-C power, 3.3 V regulator, ESP32-S3 native USB flashing, status LEDs, and moisture ADC bring-up firmware have been tested.
-- Pump switching firmware is intentionally disabled until the MOSFET/pump driver bring-up is completed.
+- USB-C power, 3.3 V regulator, ESP32-S3 native USB flashing, status LEDs, moisture ADC, and pump-gate bring-up checks have been tested.
+- Current firmware is a supervised pump-test build with a hard 2 second maximum pump pulse.
 - Board B UI daughterboard files remain in the repository as a deferred optional design.
 - The cost-down Board A fabrication package is available in `fabrication/board_a_cost_down/`.
 
@@ -41,9 +41,9 @@ It hosts a local Wi-Fi access point and web page:
 - Password: `flowerpot1`
 - URL: `http://192.168.4.1`
 
-The page shows moisture ADC readings, rolling average, min/max/span, rough wetness band, optional input short status, flow pulse count, and LED test buttons.
+The page shows moisture ADC readings, rolling average, min/max/span, rough wetness band, optional input short status, flow pulse count, Wi-Fi settings, LED test buttons, and a supervised pump test button.
 
-Important safety rule: `GPIO4 / PUMP_GATE` is forced LOW at boot and again every loop. The firmware has no pump button and no pump-control endpoint.
+Important safety rule: this is not autonomous watering firmware. The pump button requires a browser warning acknowledgement, and the firmware caps each pump run at 2000 ms.
 
 ## Repository Map
 
@@ -66,7 +66,7 @@ Before connecting a pump:
 - Confirm the ESP32 flashes over USB.
 - Confirm `PUMP_GATE` remains LOW during boot/reset.
 - Test the MOSFET gate with the pump disconnected.
-- Use short, current-limited pump tests only after the MOSFET and flyback diode are verified.
+- Use short, supervised pump tests only after the MOSFET and flyback diode are verified. Do not run the pump from a laptop USB port.
 
 The moisture connector `J3` board order is:
 
