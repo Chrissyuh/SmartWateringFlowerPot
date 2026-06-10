@@ -41,7 +41,7 @@ It hosts a local Wi-Fi access point and web page:
 - Password: `flowerpot1`
 - URL: `http://192.168.4.1`
 
-The page shows moisture ADC readings, rolling average, min/max/span, rough wetness band, optional input short status, flow pulse count, Wi-Fi settings, LED test buttons, and a supervised pump test button.
+The page shows moisture ADC readings, rolling average, min/max/span, rough wetness band, optional input short status, flow pulse count, Wi-Fi settings, LED test buttons, and a supervised pump test button. The firmware also prints USB serial UI hints so the Windows helper in `firmware/testcode1/tools/` can open the best available UI URL from a data-cable connection.
 
 Important safety rule: this is not autonomous watering firmware. The pump button requires a browser warning acknowledgement, and the firmware caps each pump run at 2000 ms.
 

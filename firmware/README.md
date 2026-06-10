@@ -13,6 +13,7 @@ It is a controlled pump-test build:
 - Caps pump runtime in firmware at `2000 ms`.
 - Hosts a local AP at all times.
 - Can optionally join home Wi-Fi from the settings form while keeping the AP online.
+- Prints USB serial UI hints so a Windows helper can open the web UI from a data-cable connection.
 - Reads the moisture ADC continuously.
 - Tracks moisture raw, rolling average, min/max/span, and rough diagnostic band.
 - Shows live optional input short status for `TP6-TP7` and `TP10-TP9`.
@@ -28,6 +29,22 @@ python -m platformio run --target upload
 ```
 
 The current configuration uses `COM3`; update `platformio.ini` if the ESP32-S3 appears on another port.
+
+To open the UI from Windows over the USB serial discovery path:
+
+```powershell
+cd firmware\testcode1
+.\tools\open-flowerpot-ui.ps1
+```
+
+For a simple plug-in watcher:
+
+```powershell
+cd firmware\testcode1
+.\tools\watch-flowerpot-ui.ps1
+```
+
+This does not turn USB into Ethernet and does not switch Wi-Fi networks. It opens the ESP32's home-Wi-Fi URL when available, otherwise the AP URL.
 
 ## Pump Safety Direction
 

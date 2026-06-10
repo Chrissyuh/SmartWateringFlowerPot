@@ -35,6 +35,7 @@ The UI shows:
 - pump ready/running state and remaining runtime
 - 2-second pump test button with first-use warning
 - home Wi-Fi settings form
+- USB serial UI hints for Windows opener scripts
 - moisture raw ADC value
 - rolling average
 - min/max/span since boot or reset
@@ -63,6 +64,38 @@ The UI shows:
   - Flashes the selected LED output for 5 seconds.
 - `POST /api/reset-stats`
   - Resets moisture statistics and flow pulse count.
+
+## USB data-cable UI helper
+
+The ESP32-S3 appears to Windows as a USB serial device, not as a USB network card. Firmware alone cannot force Windows to open a browser safely. This firmware prints machine-readable UI hints over USB serial instead:
+
+- `UI_URL`
+- `AP_URL`
+- `STA_URL`
+- AP SSID/password
+- firmware version
+
+USB serial commands:
+
+| Command | Result |
+|---|---|
+| `ui` | Prints the UI URL block. |
+| `status` | Prints the same JSON as `GET /api/status`. |
+| `help` | Prints available serial commands. |
+
+Windows helper scripts:
+
+```powershell
+.\tools\open-flowerpot-ui.ps1
+```
+
+Runs once, detects the ESP32 COM port, asks the board for its UI URL, and opens the browser.
+
+```powershell
+.\tools\watch-flowerpot-ui.ps1
+```
+
+Keeps watching for the board and opens the UI when it appears. It does not change the laptop Wi-Fi network. If the board has joined home Wi-Fi, the helper opens the home-LAN address. Otherwise it opens the AP address `http://192.168.4.1`, which still requires the browser device to be on the board AP.
 
 ## Moisture calibration notes
 

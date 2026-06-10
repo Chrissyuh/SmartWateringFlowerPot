@@ -35,6 +35,8 @@ constexpr uint16_t ADC_MAX_VALUE = 4095;
 
 constexpr uint32_t PUMP_MAX_RUNTIME_MS = 2000;
 constexpr char PUMP_CONFIRM_TOKEN[] = "pump-test";
+constexpr uint32_t USB_UI_ANNOUNCE_INTERVAL_MS = 5000;
+constexpr uint32_t USB_UI_FAST_ANNOUNCE_UNTIL_MS = 30000;
 
 WebServer server(80);
 DNSServer dnsServer;
@@ -64,6 +66,12 @@ bool pumpRunning = false;
 uint32_t pumpStartedMs = 0;
 uint32_t pumpUntilMs = 0;
 uint32_t pumpPulseCount = 0;
+
+String serialLine = "";
+bool serialWasConnected = false;
+uint32_t lastSerialUiAnnounceMs = 0;
+
+String statusJson();
 
 void IRAM_ATTR onFlowPulse() {
   flowPulseCount++;
@@ -237,6 +245,111 @@ String staStatusText() {
       return "connecting";
     default:
       return "unknown";
+  }
+}
+
+String apUiUrl() {
+  return "http://" + WiFi.softAPIP().toString();
+}
+
+String staUiUrl() {
+  return WiFi.status() == WL_CONNECTED ? "http://" + WiFi.localIP().toString() : "";
+}
+
+String primaryUiUrl() {
+  const String staUrl = staUiUrl();
+  return staUrl.length() ? staUrl : apUiUrl();
+}
+
+void printUsbUiBanner() {
+  const String staStatus = staStatusText();
+  const String staUrl = staUiUrl();
+
+  Serial.println();
+  Serial.println("FLOWERPOT_UI_BEGIN");
+  Serial.print("NAME=");
+  Serial.println(FIRMWARE_NAME);
+  Serial.print("VERSION=");
+  Serial.println(FIRMWARE_VERSION);
+  Serial.print("UI_URL=");
+  Serial.println(primaryUiUrl());
+  Serial.print("AP_SSID=");
+  Serial.println(AP_SSID);
+  Serial.print("AP_PASSWORD=");
+  Serial.println(AP_PASSWORD);
+  Serial.print("AP_URL=");
+  Serial.println(apUiUrl());
+  Serial.print("STA_CONFIGURED=");
+  Serial.println(savedStaSsid.length() ? "true" : "false");
+  Serial.print("STA_SSID=");
+  Serial.println(savedStaSsid);
+  Serial.print("STA_STATUS=");
+  Serial.println(staStatus);
+  Serial.print("STA_URL=");
+  Serial.println(staUrl);
+  Serial.print("PUMP_MAX_RUNTIME_MS=");
+  Serial.println(PUMP_MAX_RUNTIME_MS);
+  Serial.println("COMMANDS=ui,status,help");
+  Serial.println("FLOWERPOT_UI_END");
+}
+
+void printSerialHelp() {
+  Serial.println("FLOWERPOT_HELP_BEGIN");
+  Serial.println("ui     - print browser UI URL hints");
+  Serial.println("status - print /api/status JSON");
+  Serial.println("help   - print this command list");
+  Serial.println("FLOWERPOT_HELP_END");
+}
+
+void handleSerialCommand(String command) {
+  command.trim();
+  if (command.length() == 0) {
+    return;
+  }
+
+  String lower = command;
+  lower.toLowerCase();
+
+  if (lower == "ui" || lower == "url" || lower == "open") {
+    printUsbUiBanner();
+  } else if (lower == "status") {
+    Serial.println(statusJson());
+  } else if (lower == "help" || lower == "?") {
+    printSerialHelp();
+  } else {
+    Serial.print("ERR unknown command: ");
+    Serial.println(command);
+    printSerialHelp();
+  }
+}
+
+void serviceSerialUi() {
+  const bool serialConnected = Serial;
+  const uint32_t now = millis();
+
+  if (serialConnected && !serialWasConnected) {
+    printUsbUiBanner();
+    lastSerialUiAnnounceMs = now;
+  }
+  serialWasConnected = serialConnected;
+
+  if (serialConnected && now < USB_UI_FAST_ANNOUNCE_UNTIL_MS &&
+      now - lastSerialUiAnnounceMs >= USB_UI_ANNOUNCE_INTERVAL_MS) {
+    printUsbUiBanner();
+    lastSerialUiAnnounceMs = now;
+  }
+
+  while (Serial.available() > 0) {
+    const char c = static_cast<char>(Serial.read());
+    if (c == '\n' || c == '\r') {
+      handleSerialCommand(serialLine);
+      serialLine = "";
+    } else if (serialLine.length() < 96) {
+      serialLine += c;
+    } else {
+      serialLine = "";
+      Serial.println("ERR command too long");
+    }
   }
 }
 
@@ -594,6 +707,7 @@ void setup() {
   Serial.println(AP_PASSWORD);
   Serial.print("URL: http://");
   Serial.println(WiFi.softAPIP());
+  Serial.println("USB serial command: ui");
   if (savedStaSsid.length()) {
     Serial.print("Trying home Wi-Fi SSID: ");
     Serial.println(savedStaSsid);
@@ -606,6 +720,7 @@ void loop() {
   updateStaReconnect();
   dnsServer.processNextRequest();
   server.handleClient();
+  serviceSerialUi();
   updateServicePad();
   updateLeds();
   servicePumpSafety();
