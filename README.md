@@ -10,7 +10,7 @@ This repository contains the KiCad design files, generated fabrication outputs, 
 
 - Board A cost-down prototype has been fabricated and hand assembled for bring-up.
 - USB-C power, 3.3 V regulator, ESP32-S3 native USB flashing, status LEDs, moisture ADC, and pump-gate bring-up checks have been tested.
-- Current firmware is a supervised pump-test build with a hard 2 second maximum pump pulse.
+- Current firmware is a supervised pump-test build with adjustable manual pump pulses and a hard 2 second firmware maximum.
 - Board B UI daughterboard files remain in the repository as a deferred optional design.
 - The cost-down Board A fabrication package is available in `fabrication/board_a_cost_down/`.
 
@@ -41,7 +41,7 @@ It hosts a local Wi-Fi access point and web page:
 - Password: `flowerpot1`
 - URL: `http://192.168.4.1`
 
-The page shows moisture ADC readings, rolling average, min/max/span, rough wetness band, optional input short status, flow pulse count, Wi-Fi settings, LED test buttons, and a supervised pump test button. The firmware also prints USB serial UI hints so the Windows helper in `firmware/testcode1/tools/` can open the best available UI URL from a data-cable connection.
+The page shows moisture ADC readings, rolling average, min/max/span, rough wetness band, collapsible charts, optional input short status, flow pulse count, AP-client/session counters, Wi-Fi settings, LED test buttons, session JSON export, and a supervised adjustable pump test button. The firmware also prints USB serial UI hints so the Windows helper in `firmware/testcode1/tools/` can open the best available UI URL from a data-cable connection.
 
 Important safety rule: this is not autonomous watering firmware. The pump button requires a browser warning acknowledgement, and the firmware caps each pump run at 2000 ms.
 

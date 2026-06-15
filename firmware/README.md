@@ -16,6 +16,8 @@ It is a controlled pump-test build:
 - Prints USB serial UI hints so a Windows helper can open the web UI from a data-cable connection.
 - Reads the moisture ADC continuously.
 - Tracks moisture raw, rolling average, min/max/span, and rough diagnostic band.
+- Records a rolling moisture/client history buffer and exposes collapsible charts in the hosted page.
+- Downloads a session JSON export with firmware identity, moisture stats/history, AP-client counters, LED-test counters, flow pulses, and pump-run count.
 - Shows live optional input short status for `TP6-TP7` and `TP10-TP9`.
 - Provides LED test buttons for the red and green board LEDs.
 

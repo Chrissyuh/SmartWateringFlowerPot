@@ -10,6 +10,7 @@ This firmware is for the first controlled pump trial after the MOSFET has been i
 - Pump control is unlocked, but every pump request is capped in firmware at `2000 ms`.
 - The pump endpoint accepts only `POST` and requires a confirmation token.
 - The web UI shows a first-use browser warning before running the pump button.
+- The UI can request shorter pump pulses, but firmware still clamps every request to the hard `2000 ms` maximum.
 - AP mode always stays enabled, even if the ESP32 joins home Wi-Fi.
 - Use a dedicated 5 V supply or USB power bank for pump tests. Do not run the pump from a laptop USB port.
 
@@ -33,24 +34,33 @@ This firmware is for the first controlled pump trial after the MOSFET has been i
 The UI shows:
 
 - pump ready/running state and remaining runtime
-- 2-second pump test button with first-use warning
+- adjustable manual pump pulse control with first-use warning and a 2-second firmware cap
 - home Wi-Fi settings form
 - USB serial UI hints for Windows opener scripts
 - moisture raw ADC value
 - rolling average
 - min/max/span since boot or reset
 - rough moisture band: `very dry`, `dry-ish`, `moist`, or `wet`
+- collapsible moisture, AP-client, and session-event charts
 - flow pulse count
+- pump-run, LED-test, AP-client, and export counters
 - `TP6` to `TP7/GND` live short status
 - `TP10` to `TP9/GND` live short status
 - 5-second LED test buttons for red, green, or both LEDs
-- reset-stats button for moisture min/max and flow pulse count
+- reset-stats button for the current session counters and history
+- session JSON download for firmware version, counters, moisture stats, and history points
 
 ## API
 
 - `GET /api/status`
   - Keeps the original bring-up fields: `moisture_adc_raw`, `reservoir_sw_low`, `flow_input_low`, `flow_pulses`, and `pump`.
-  - Adds Wi-Fi state, pump state, moisture average/min/max/span, `moisture_band`, and sample count.
+  - Adds Wi-Fi state, pump state, moisture average/min/max/span, `moisture_band`, sample count, pump/LED counters, AP client counters, and history metadata.
+- `GET /api/history`
+  - Returns the rolling device history buffer.
+  - Current interval is about `10 s`; current capacity is `360` points, or roughly the last hour.
+- `GET /api/export`
+  - Downloads `flowerpot-session.json`.
+  - Includes firmware identity, Wi-Fi state, counters, moisture summary, and the history buffer.
 - `POST /api/pump`
   - Body must include `confirm=pump-test`.
   - Optional `duration_ms` is accepted but clamped to `2000`.
@@ -63,7 +73,7 @@ The UI shows:
 - `POST /api/flash?led=red|green|both`
   - Flashes the selected LED output for 5 seconds.
 - `POST /api/reset-stats`
-  - Resets moisture statistics and flow pulse count.
+  - Resets moisture statistics, flow pulse count, pump/LED counters, AP counters, export count, and the history buffer.
 
 ## USB data-cable UI helper
 

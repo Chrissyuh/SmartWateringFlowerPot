@@ -8,7 +8,7 @@
 namespace {
 
 constexpr char FIRMWARE_NAME[] = "testcode1";
-constexpr char FIRMWARE_VERSION[] = "pump-test-v1";
+constexpr char FIRMWARE_VERSION[] = "pump-test-v2";
 
 constexpr uint8_t PIN_MOISTURE_ADC = 1;
 constexpr uint8_t PIN_PUMP_GATE = 4;
@@ -37,6 +37,8 @@ constexpr uint32_t PUMP_MAX_RUNTIME_MS = 2000;
 constexpr char PUMP_CONFIRM_TOKEN[] = "pump-test";
 constexpr uint32_t USB_UI_ANNOUNCE_INTERVAL_MS = 5000;
 constexpr uint32_t USB_UI_FAST_ANNOUNCE_UNTIL_MS = 30000;
+constexpr uint32_t HISTORY_SAMPLE_INTERVAL_MS = 10000;
+constexpr uint16_t HISTORY_CAPACITY = 360;
 
 WebServer server(80);
 DNSServer dnsServer;
@@ -47,6 +49,8 @@ String savedStaPassword = "";
 uint32_t staConnectStartedMs = 0;
 
 volatile uint32_t flowPulseCount = 0;
+volatile uint32_t apConnectEvents = 0;
+volatile uint32_t apDisconnectEvents = 0;
 
 uint16_t moistureWindow[MOISTURE_AVG_WINDOW] = {};
 uint8_t moistureWindowIndex = 0;
@@ -61,17 +65,39 @@ uint32_t lastMoistureSampleMs = 0;
 uint32_t ledTestUntilMs = 0;
 String ledTestMode = "";
 uint32_t reservoirLowStartedMs = 0;
+uint32_t ledFlashCount = 0;
+uint32_t redLedFlashCount = 0;
+uint32_t greenLedFlashCount = 0;
+uint32_t bothLedFlashCount = 0;
 
 bool pumpRunning = false;
 uint32_t pumpStartedMs = 0;
 uint32_t pumpUntilMs = 0;
 uint32_t pumpPulseCount = 0;
+uint32_t exportCount = 0;
+uint8_t maxApClients = 0;
+
+struct HistoryPoint {
+  uint32_t uptimeMs;
+  uint16_t raw;
+  uint16_t avg;
+  uint8_t clients;
+  bool pump;
+};
+
+HistoryPoint history[HISTORY_CAPACITY] = {};
+uint16_t historyWriteIndex = 0;
+uint16_t historyCount = 0;
+uint32_t lastHistorySampleMs = 0;
 
 String serialLine = "";
 bool serialWasConnected = false;
 uint32_t lastSerialUiAnnounceMs = 0;
 
 String statusJson();
+String historyJson();
+String exportJson();
+void addHistoryPoint();
 
 void IRAM_ATTR onFlowPulse() {
   flowPulseCount++;
@@ -119,6 +145,7 @@ bool startPumpPulse(uint32_t requestedMs) {
   pumpUntilMs = now + requestedMs;
   pumpPulseCount++;
   digitalWrite(PIN_PUMP_GATE, PUMP_ON);
+  addHistoryPoint();
   return true;
 }
 
@@ -133,6 +160,41 @@ void resetFlowPulseCount() {
   noInterrupts();
   flowPulseCount = 0;
   interrupts();
+}
+
+uint32_t readApConnectEvents() {
+  noInterrupts();
+  const uint32_t count = apConnectEvents;
+  interrupts();
+  return count;
+}
+
+uint32_t readApDisconnectEvents() {
+  noInterrupts();
+  const uint32_t count = apDisconnectEvents;
+  interrupts();
+  return count;
+}
+
+uint8_t currentApClients() {
+  return WiFi.softAPgetStationNum();
+}
+
+void updateMaxApClients() {
+  const uint8_t clients = currentApClients();
+  if (clients > maxApClients) {
+    maxApClients = clients;
+  }
+}
+
+void onWiFiEvent(arduino_event_id_t event) {
+  if (event == ARDUINO_EVENT_WIFI_AP_STACONNECTED) {
+    apConnectEvents++;
+    updateMaxApClients();
+  } else if (event == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED) {
+    apDisconnectEvents++;
+    updateMaxApClients();
+  }
 }
 
 String jsonEscape(const String &value) {
@@ -215,6 +277,64 @@ uint16_t moistureSpan() {
     return 0;
   }
   return moistureMax - moistureMin;
+}
+
+void resetHistory() {
+  historyWriteIndex = 0;
+  historyCount = 0;
+  lastHistorySampleMs = 0;
+  for (uint16_t i = 0; i < HISTORY_CAPACITY; i++) {
+    history[i] = {};
+  }
+}
+
+void addHistoryPoint() {
+  updateMaxApClients();
+  history[historyWriteIndex] = {
+      millis(),
+      moistureRaw,
+      moistureAverage(),
+      currentApClients(),
+      pumpRunning,
+  };
+  historyWriteIndex = (historyWriteIndex + 1) % HISTORY_CAPACITY;
+  if (historyCount < HISTORY_CAPACITY) {
+    historyCount++;
+  }
+}
+
+void updateHistorySampler() {
+  const uint32_t now = millis();
+  if (now - lastHistorySampleMs < HISTORY_SAMPLE_INTERVAL_MS) {
+    return;
+  }
+  lastHistorySampleMs = now;
+  addHistoryPoint();
+}
+
+void appendHistoryPoints(String &json) {
+  json += F("[");
+  for (uint16_t i = 0; i < historyCount; i++) {
+    const uint16_t index = historyCount == HISTORY_CAPACITY
+                               ? (historyWriteIndex + i) % HISTORY_CAPACITY
+                               : i;
+    const HistoryPoint &point = history[index];
+    if (i > 0) {
+      json += F(",");
+    }
+    json += F("{\"t\":");
+    json += String(point.uptimeMs);
+    json += F(",\"raw\":");
+    json += String(point.raw);
+    json += F(",\"avg\":");
+    json += String(point.avg);
+    json += F(",\"clients\":");
+    json += String(point.clients);
+    json += F(",\"pump\":");
+    json += String(point.pump ? "true" : "false");
+    json += F("}");
+  }
+  json += F("]");
 }
 
 String moistureBand() {
@@ -384,6 +504,8 @@ String statusJson() {
   const bool flowLow = digitalRead(PIN_FLOW_PULSE) == LOW;
   const uint32_t now = millis();
   const uint32_t flowCount = readFlowPulseCount();
+  const uint8_t apClients = currentApClients();
+  updateMaxApClients();
   const String band = moistureBand();
   const String staStatus = staStatusText();
 
@@ -394,8 +516,11 @@ String statusJson() {
   json += "\"mac\":\"" + WiFi.macAddress() + "\",";
   json += "\"ap_ssid\":\"" + String(AP_SSID) + "\",";
   json += "\"ap_ip\":\"" + WiFi.softAPIP().toString() + "\",";
-  json += "\"ap_clients\":" + String(WiFi.softAPgetStationNum()) + ",";
-  json += "\"clients\":" + String(WiFi.softAPgetStationNum()) + ",";
+  json += "\"ap_clients\":" + String(apClients) + ",";
+  json += "\"clients\":" + String(apClients) + ",";
+  json += "\"ap_connect_events\":" + String(readApConnectEvents()) + ",";
+  json += "\"ap_disconnect_events\":" + String(readApDisconnectEvents()) + ",";
+  json += "\"ap_max_clients\":" + String(maxApClients) + ",";
   json += "\"sta_configured\":" + String(savedStaSsid.length() ? "true" : "false") + ",";
   json += "\"sta_ssid\":\"" + jsonEscape(savedStaSsid) + "\",";
   json += "\"sta_status\":\"" + jsonEscape(staStatus) + "\",";
@@ -416,103 +541,361 @@ String statusJson() {
   json += "\"pump_max_runtime_ms\":" + String(PUMP_MAX_RUNTIME_MS) + ",";
   json += "\"pump_pulses\":" + String(pumpPulseCount) + ",";
   json += "\"led_test\":\"" + jsonEscape(ledTestMode) + "\",";
-  json += "\"led_test_remaining_ms\":" + String(ledTestUntilMs > now ? ledTestUntilMs - now : 0);
+  json += "\"led_test_remaining_ms\":" + String(ledTestUntilMs > now ? ledTestUntilMs - now : 0) + ",";
+  json += "\"led_flash_count\":" + String(ledFlashCount) + ",";
+  json += "\"led_flash_red\":" + String(redLedFlashCount) + ",";
+  json += "\"led_flash_green\":" + String(greenLedFlashCount) + ",";
+  json += "\"led_flash_both\":" + String(bothLedFlashCount) + ",";
+  json += "\"history_count\":" + String(historyCount) + ",";
+  json += "\"history_capacity\":" + String(HISTORY_CAPACITY) + ",";
+  json += "\"history_interval_ms\":" + String(HISTORY_SAMPLE_INTERVAL_MS) + ",";
+  json += "\"export_count\":" + String(exportCount);
   json += "}";
+  return json;
+}
+
+String historyJson() {
+  String json;
+  json.reserve(256 + static_cast<uint32_t>(historyCount) * 72);
+  json += F("{\"interval_ms\":");
+  json += String(HISTORY_SAMPLE_INTERVAL_MS);
+  json += F(",\"capacity\":");
+  json += String(HISTORY_CAPACITY);
+  json += F(",\"count\":");
+  json += String(historyCount);
+  json += F(",\"points\":");
+  appendHistoryPoints(json);
+  json += F("}");
+  return json;
+}
+
+String exportJson() {
+  updateMaxApClients();
+  String json;
+  json.reserve(1024 + static_cast<uint32_t>(historyCount) * 80);
+  json += F("{\"name\":\"");
+  json += FIRMWARE_NAME;
+  json += F("\",\"version\":\"");
+  json += FIRMWARE_VERSION;
+  json += F("\",\"generated_uptime_ms\":");
+  json += String(millis());
+  json += F(",\"ap_ssid\":\"");
+  json += AP_SSID;
+  json += F("\",\"ap_ip\":\"");
+  json += WiFi.softAPIP().toString();
+  json += F("\",\"sta_configured\":");
+  json += String(savedStaSsid.length() ? "true" : "false");
+  json += F(",\"sta_ssid\":\"");
+  json += jsonEscape(savedStaSsid);
+  json += F("\",\"sta_status\":\"");
+  json += jsonEscape(staStatusText());
+  json += F("\",\"sta_ip\":\"");
+  json += (WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : String(""));
+  json += F("\",\"summary\":{");
+  json += F("\"moisture_adc_raw\":");
+  json += String(moistureRaw);
+  json += F(",\"moisture_adc_avg\":");
+  json += String(moistureAverage());
+  json += F(",\"moisture_adc_min\":");
+  json += String(moistureMinValue());
+  json += F(",\"moisture_adc_max\":");
+  json += String(moistureMaxValue());
+  json += F(",\"moisture_adc_span\":");
+  json += String(moistureSpan());
+  json += F(",\"moisture_band\":\"");
+  json += jsonEscape(moistureBand());
+  json += F("\",\"samples\":");
+  json += String(moistureSampleCount);
+  json += F(",\"flow_pulses\":");
+  json += String(readFlowPulseCount());
+  json += F(",\"pump_pulses\":");
+  json += String(pumpPulseCount);
+  json += F(",\"pump_max_runtime_ms\":");
+  json += String(PUMP_MAX_RUNTIME_MS);
+  json += F(",\"led_flash_count\":");
+  json += String(ledFlashCount);
+  json += F(",\"led_flash_red\":");
+  json += String(redLedFlashCount);
+  json += F(",\"led_flash_green\":");
+  json += String(greenLedFlashCount);
+  json += F(",\"led_flash_both\":");
+  json += String(bothLedFlashCount);
+  json += F(",\"ap_connect_events\":");
+  json += String(readApConnectEvents());
+  json += F(",\"ap_disconnect_events\":");
+  json += String(readApDisconnectEvents());
+  json += F(",\"ap_max_clients\":");
+  json += String(maxApClients);
+  json += F(",\"export_count\":");
+  json += String(exportCount);
+  json += F("},\"history\":{\"interval_ms\":");
+  json += String(HISTORY_SAMPLE_INTERVAL_MS);
+  json += F(",\"capacity\":");
+  json += String(HISTORY_CAPACITY);
+  json += F(",\"count\":");
+  json += String(historyCount);
+  json += F(",\"points\":");
+  appendHistoryPoints(json);
+  json += F("}}");
   return json;
 }
 
 String pageHtml() {
   const String mac = WiFi.macAddress();
   String html;
-  html.reserve(16000);
-  html += F("<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>");
-  html += F("<title>Flower Pot testcode1</title>");
-  html += F("<style>");
-  html += F(":root{color-scheme:light}body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:#f6f7f2;color:#172018}");
-  html += F("main{max-width:960px;margin:0 auto;padding:18px}h1{font-size:26px;margin:0 0 6px}h2{font-size:18px;margin:18px 0 8px}");
-  html += F(".sub{color:#526052;margin-bottom:14px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin:10px 0}");
-  html += F(".card{background:white;border:1px solid #d7ddd2;border-radius:8px;padding:12px;min-height:72px}.k{font-size:12px;color:#66705f;text-transform:uppercase}.v{font-size:24px;font-weight:700;word-break:break-word}.small{font-size:14px;color:#53604f}");
-  html += F("button{appearance:none;border:0;border-radius:6px;padding:12px 14px;margin:5px 5px 5px 0;font-weight:700;background:#245b3b;color:white}");
-  html += F("button.red{background:#9f2929}button.green{background:#27733e}button.gray{background:#555}button.pump{background:#b33a22}button:disabled{opacity:.55}");
-  html += F("input{box-sizing:border-box;width:100%;max-width:360px;border:1px solid #b8c1b3;border-radius:6px;padding:10px;margin:4px 0 8px;font:inherit}");
-  html += F(".warn{border-left:5px solid #b93a32;background:#fff;padding:12px;margin:14px 0}.ok{border-left:5px solid #27733e;background:#fff;padding:12px;margin:14px 0}");
-  html += F(".band{display:inline-block;border-radius:999px;padding:4px 10px;background:#e8ece1;font-size:18px}.wet{background:#cfe8ff}.moist{background:#d8efcf}.dry-ish{background:#fff0bf}.very-dry{background:#ffd7c7}");
-  html += F("code{background:#ecefe8;padding:2px 5px;border-radius:4px}pre{white-space:pre-wrap;background:#172018;color:#e9f0e5;padding:12px;border-radius:8px;overflow:auto;font-size:13px}");
-  html += F("</style></head><body><main>");
-  html += F("<h1>Flower Pot testcode1</h1>");
-  html += F("<div class='sub'>Pump-test firmware. AP always stays on. Pump is limited in firmware to a 2 second pulse.</div>");
-  html += F("<div class='warn'><b>Pump unlocked:</b> use a dedicated 5 V supply or power bank, not a laptop USB port. Firmware caps each pump run at 2000 ms.</div>");
+  html.reserve(30000);
+  html += R"HTML(<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flower Pot testcode1</title>
+<style>
+:root{color-scheme:light;--ink:#172018;--muted:#5d675b;--line:#d7ddd2;--panel:#fff;--bg:#f6f7f2;--green:#245b3b;--red:#9f2929;--amber:#b36a22;--blue:#28628f}
+*{box-sizing:border-box}body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:var(--bg);color:var(--ink)}main{max-width:1120px;margin:0 auto;padding:16px}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}h1{font-size:26px;line-height:1.1;margin:0 0 6px}h2{font-size:18px;margin:0 0 10px}.sub{color:var(--muted);font-size:14px}.pill{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;background:#fff;padding:6px 10px;font-size:13px;color:var(--muted);white-space:nowrap}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0}.card,.panel,.chart-box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}.card{min-height:82px}.k{font-size:12px;color:#66705f;text-transform:uppercase;letter-spacing:.02em}.v{font-size:24px;font-weight:750;word-break:break-word}.small{font-size:14px;color:#53604f}.tiny{font-size:12px;color:#66705f}
+.panel{margin:12px 0}.warn{border-left:5px solid #b93a32;background:#fff;padding:12px;margin:12px 0}.ok{border-left:5px solid #27733e;background:#fff;padding:12px;margin:12px 0}
+button{appearance:none;border:0;border-radius:6px;padding:12px 14px;margin:4px 5px 4px 0;font-weight:750;background:var(--green);color:white;min-height:42px}button.red{background:var(--red)}button.green{background:#27733e}button.gray{background:#555}button.pump{background:#b33a22}button.blue{background:var(--blue)}button:disabled{opacity:.55}.button-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+label{font-weight:650}.control-grid{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:end}.duration-row{display:grid;grid-template-columns:1fr 112px;gap:10px;align-items:center}input{box-sizing:border-box;width:100%;border:1px solid #b8c1b3;border-radius:6px;padding:10px;margin:4px 0 8px;font:inherit}input[type=range]{padding:0;accent-color:#245b3b}
+.band{display:inline-block;border-radius:999px;padding:4px 10px;background:#e8ece1;font-size:18px}.wet{background:#cfe8ff}.moist{background:#d8efcf}.dry-ish{background:#fff0bf}.very-dry{background:#ffd7c7}.starting{background:#ecefe8}
+details.panel{padding:0}summary{cursor:pointer;list-style:none;padding:12px;font-weight:800;display:flex;justify-content:space-between;gap:12px;align-items:center}summary::-webkit-details-marker{display:none}summary:after{content:"v";font-size:14px;color:var(--muted)}details[open]>summary:after{content:"^"}.details-body{padding:0 12px 12px}
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:10px}.chart-title{font-weight:800;margin-bottom:4px}canvas{display:block;width:100%;height:190px;border-radius:6px;background:#fff}pre{white-space:pre-wrap;background:#172018;color:#e9f0e5;padding:12px;border-radius:8px;overflow:auto;font-size:13px}code{background:#ecefe8;padding:2px 5px;border-radius:4px}
+@media(max-width:620px){main{padding:12px}header{display:block}.pill{margin-top:6px}.v{font-size:21px}.control-grid,.duration-row{grid-template-columns:1fr}button{width:100%;margin-right:0}.button-row{display:block}.chart-grid{grid-template-columns:1fr}}
+</style></head><body><main>
+<header><div><h1>Flower Pot testcode1</h1><div class="sub">Pump-test firmware. AP always stays on. Manual pump runs are capped in firmware.</div></div><div class="pill" id="versionPill">...</div></header>
+<div class="warn"><b>Pump unlocked:</b> use a dedicated 5 V supply or power bank, not a laptop USB port. Firmware caps each pump request at 2000 ms.</div>
 
-  html += F("<div><button class='pump' id='pumpBtn' onclick='runPump()'>Run pump 2s</button>");
-  html += F("<button class='red' onclick=\"flashLed('red')\">Flash red LED 5s</button>");
-  html += F("<button class='green' onclick=\"flashLed('green')\">Flash green LED 5s</button>");
-  html += F("<button onclick=\"flashLed('both')\">Flash both 5s</button>");
-  html += F("<button class='gray' onclick='resetStats()'>Reset stats</button>");
-  html += F("<button class='gray' onclick='refreshStatus()'>Refresh</button></div>");
+<section class="panel">
+<h2>Manual Controls</h2>
+<div class="control-grid">
+  <div>
+    <label for="pumpDuration">Pump duration <span id="pumpDurationText">500 ms</span></label>
+    <div class="duration-row">
+      <input id="pumpDuration" type="range" min="250" max="2000" step="250" value="500">
+      <input id="pumpDurationNumber" type="number" min="250" max="2000" step="50" value="500">
+    </div>
+    <div class="tiny">The page lets you choose the pulse, but firmware still refuses anything over 2000 ms.</div>
+  </div>
+  <div class="button-row"><button class="pump" id="pumpBtn" onclick="runPump()">Run pump</button></div>
+</div>
+<div class="button-row">
+  <button class="red" onclick="flashLed('red')">Flash red LED 5s</button>
+  <button class="green" onclick="flashLed('green')">Flash green LED 5s</button>
+  <button onclick="flashLed('both')">Flash both 5s</button>
+  <button class="gray" onclick="resetStats()">Reset stats</button>
+  <button class="gray" onclick="refreshStatus()">Refresh</button>
+</div>
+</section>
 
-  html += F("<section class='grid'>");
-  html += F("<div class='card'><div class='k'>Pump</div><div class='v' id='pumpState'>...</div><div class='small' id='pumpRemaining'>...</div></div>");
-  html += F("<div class='card'><div class='k'>Moisture raw</div><div class='v' id='moistureRaw'>...</div></div>");
-  html += F("<div class='card'><div class='k'>Moisture avg</div><div class='v' id='moistureAvg'>...</div></div>");
-  html += F("<div class='card'><div class='k'>Moisture band</div><div class='v'><span class='band' id='moistureBand'>...</span></div></div>");
-  html += F("<div class='card'><div class='k'>Min / max</div><div class='v' id='moistureRange'>...</div><div class='small' id='moistureSpan'>...</div></div>");
-  html += F("</section>");
+<section class="grid">
+  <div class="card"><div class="k">Pump</div><div class="v" id="pumpState">...</div><div class="small" id="pumpRemaining">...</div></div>
+  <div class="card"><div class="k">Moisture raw</div><div class="v" id="moistureRaw">...</div></div>
+  <div class="card"><div class="k">Moisture avg</div><div class="v" id="moistureAvg">...</div></div>
+  <div class="card"><div class="k">Moisture band</div><div class="v"><span class="band starting" id="moistureBand">...</span></div></div>
+  <div class="card"><div class="k">Min / max</div><div class="v" id="moistureRange">...</div><div class="small" id="moistureSpan">...</div></div>
+  <div class="card"><div class="k">AP clients</div><div class="v" id="apClients">...</div><div class="small" id="apClientEvents">...</div></div>
+</section>
 
-  html += F("<section class='grid'>");
-  html += F("<div class='card'><div class='k'>TP6 to TP7</div><div class='v' id='tp6State'>...</div></div>");
-  html += F("<div class='card'><div class='k'>TP10 to TP9</div><div class='v' id='tp10State'>...</div></div>");
-  html += F("<div class='card'><div class='k'>Flow pulses</div><div class='v' id='flowPulseState'>...</div></div>");
-  html += F("<div class='card'><div class='k'>Samples</div><div class='v' id='sampleCount'>...</div></div>");
-  html += F("</section>");
+<section class="grid">
+  <div class="card"><div class="k">TP6 to TP7</div><div class="v" id="tp6State">...</div></div>
+  <div class="card"><div class="k">TP10 to TP9</div><div class="v" id="tp10State">...</div></div>
+  <div class="card"><div class="k">Flow pulses</div><div class="v" id="flowPulseState">...</div></div>
+  <div class="card"><div class="k">Pump runs</div><div class="v" id="pumpPulseState">...</div></div>
+  <div class="card"><div class="k">LED tests</div><div class="v" id="ledFlashState">...</div><div class="small" id="ledFlashDetails">...</div></div>
+  <div class="card"><div class="k">Samples</div><div class="v" id="sampleCount">...</div></div>
+</section>
 
-  html += F("<h2>Network</h2><section class='grid'>");
-  html += F("<div class='card'><div class='k'>AP SSID</div><div class='v'>");
+<details class="panel" open id="chartsPanel"><summary><span>Charts</span><span class="tiny" id="chartHint">loading history</span></summary>
+<div class="details-body">
+  <div class="chart-grid">
+    <div class="chart-box"><div class="chart-title">Moisture ADC</div><canvas id="moistureChart"></canvas><div class="tiny">Higher is drier, lower is wetter. Green is rolling average.</div></div>
+    <div class="chart-box"><div class="chart-title">AP Clients</div><canvas id="clientChart"></canvas><div class="tiny">Current clients connected to the board AP.</div></div>
+    <div class="chart-box"><div class="chart-title">Session Events</div><canvas id="eventChart"></canvas><div class="tiny">Counters since boot or reset-stats.</div></div>
+  </div>
+</div></details>
+
+<section class="panel">
+<h2>Session Export</h2>
+<div class="small">Downloads JSON with firmware version, Wi-Fi/client counters, pump/LED counters, moisture stats, and the device history buffer.</div>
+<div class="button-row"><button class="blue" onclick="downloadExport()">Download session JSON</button><button class="gray" onclick="loadHistory()">Reload history</button></div>
+</section>
+
+<section class="grid">
+  <div class="card"><div class="k">AP SSID</div><div class="v">)HTML";
   html += AP_SSID;
-  html += F("</div><div class='small'>AP URL: http://192.168.4.1</div></div>");
-  html += F("<div class='card'><div class='k'>Home Wi-Fi</div><div class='v' id='staStatus'>...</div><div class='small' id='staDetails'>...</div></div>");
-  html += F("<div class='card'><div class='k'>MAC</div><div class='v'>");
+  html += R"HTML(</div><div class="small">AP URL: http://192.168.4.1</div></div>
+  <div class="card"><div class="k">Home Wi-Fi</div><div class="v" id="staStatus">...</div><div class="small" id="staDetails">...</div></div>
+  <div class="card"><div class="k">MAC</div><div class="v">)HTML";
   html += mac;
-  html += F("</div></div>");
-  html += F("</section>");
+  html += R"HTML(</div></div>
+</section>
 
-  html += F("<div class='card'><h2>Settings</h2><form id='wifiForm' onsubmit='saveWifi(event)'>");
-  html += F("<label>Home Wi-Fi SSID<br><input name='ssid' id='ssidInput' autocomplete='off'></label><br>");
-  html += F("<label>Password<br><input name='password' type='password' autocomplete='current-password'></label><br>");
-  html += F("<button type='submit'>Connect ESP to home Wi-Fi</button>");
-  html += F("<button type='button' class='gray' onclick='clearWifi()'>Clear saved Wi-Fi</button>");
-  html += F("<div class='small' id='wifiMessage'></div></form></div>");
+<section class="panel"><h2>Settings</h2><form id="wifiForm" onsubmit="saveWifi(event)">
+<label>Home Wi-Fi SSID<br><input name="ssid" id="ssidInput" autocomplete="off"></label><br>
+<label>Password<br><input name="password" type="password" autocomplete="current-password"></label><br>
+<div class="button-row"><button type="submit">Connect ESP to home Wi-Fi</button><button type="button" class="gray" onclick="clearWifi()">Clear saved Wi-Fi</button></div>
+<div class="small" id="wifiMessage"></div></form></section>
 
-  html += F("<div class='ok'>Diagnostic bands are rough: higher ADC means drier. Use real soil readings before choosing watering thresholds.</div>");
-  html += F("<h2>Status JSON</h2><pre id='status'>Loading...</pre>");
-  html += F("<script>");
-  html += F("function yn(v){return v?'SHORTED':'open'}");
-  html += F("function bandClass(v){return String(v||'').replace(/ /g,'-')}");
-  html += F("function ms(v){return Math.max(0,Math.ceil(Number(v||0)))+' ms'}");
-  html += F("async function refreshStatus(){try{const r=await fetch('/api/status',{cache:'no-store'});const s=await r.json();");
-  html += F("document.getElementById('pumpState').textContent=s.pump_running?'RUNNING':'ready';");
-  html += F("document.getElementById('pumpRemaining').textContent=s.pump_running?('remaining '+ms(s.pump_remaining_ms)):('max '+ms(s.pump_max_runtime_ms));");
-  html += F("document.getElementById('pumpBtn').disabled=!!s.pump_running;");
-  html += F("document.getElementById('moistureRaw').textContent=s.moisture_adc_raw;");
-  html += F("document.getElementById('moistureAvg').textContent=s.moisture_adc_avg;");
-  html += F("const b=document.getElementById('moistureBand');b.textContent=s.moisture_band;b.className='band '+bandClass(s.moisture_band);");
-  html += F("document.getElementById('moistureRange').textContent=s.moisture_adc_min+' / '+s.moisture_adc_max;");
-  html += F("document.getElementById('moistureSpan').textContent='span '+s.moisture_adc_span;");
-  html += F("document.getElementById('tp6State').textContent=yn(s.reservoir_sw_low);");
-  html += F("document.getElementById('tp10State').textContent=yn(s.flow_input_low);");
-  html += F("document.getElementById('flowPulseState').textContent=s.flow_pulses;");
-  html += F("document.getElementById('sampleCount').textContent=s.samples;");
-  html += F("document.getElementById('staStatus').textContent=s.sta_status;");
-  html += F("document.getElementById('staDetails').textContent=s.sta_configured?(s.sta_ssid+(s.sta_ip?' at '+s.sta_ip:'')):'not configured';");
-  html += F("if(!document.getElementById('ssidInput').value&&s.sta_ssid){document.getElementById('ssidInput').value=s.sta_ssid}");
-  html += F("document.getElementById('status').textContent=JSON.stringify(s,null,2)}catch(e){document.getElementById('status').textContent='Status read failed: '+e}}");
-  html += F("async function flashLed(which){await fetch('/api/flash?led='+encodeURIComponent(which),{method:'POST'});refreshStatus()}");
-  html += F("async function resetStats(){await fetch('/api/reset-stats',{method:'POST'});refreshStatus()}");
-  html += F("async function saveWifi(e){e.preventDefault();const fd=new FormData(e.target);const r=await fetch('/api/wifi',{method:'POST',body:new URLSearchParams(fd)});document.getElementById('wifiMessage').textContent=await r.text();setTimeout(refreshStatus,1000)}");
-  html += F("async function clearWifi(){const r=await fetch('/api/wifi/clear',{method:'POST'});document.getElementById('wifiMessage').textContent=await r.text();refreshStatus()}");
-  html += F("async function runPump(){if(!localStorage.getItem('pumpWarned')){const ok=confirm('First pump test warning: use a dedicated 5 V supply, keep water away from the board, confirm MOSFET/diode orientation, and expect only a 2 second pulse. Run pump now?');if(!ok)return;localStorage.setItem('pumpWarned','yes')}");
-  html += F("const r=await fetch('/api/pump',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'duration_ms=2000&confirm=pump-test'});if(!r.ok){alert(await r.text())}refreshStatus()}");
-  html += F("refreshStatus();setInterval(refreshStatus,1000);");
-  html += F("</script></main></body></html>");
+<div class="ok">Diagnostic bands are rough: higher ADC means drier. Use real soil readings before choosing watering thresholds.</div>
+<details class="panel"><summary><span>Status JSON</span><span class="tiny">raw API view</span></summary><div class="details-body"><pre id="status">Loading...</pre></div></details>
+
+<script>
+const MAX_POINTS=360;
+let historyPoints=[];
+let latestStatus=null;
+let lastStatusUptime=-1;
+function $(id){return document.getElementById(id)}
+function text(id,v){const e=$(id);if(e)e.textContent=v}
+function yn(v){return v?'SHORTED':'open'}
+function bandClass(v){return String(v||'starting').replace(/ /g,'-')}
+function ms(v){return Math.max(0,Math.ceil(Number(v||0)))+' ms'}
+function clamp(v,min,max){return Math.min(max,Math.max(min,Number.isFinite(v)?v:min))}
+function pumpMax(){return Number(latestStatus&&latestStatus.pump_max_runtime_ms)||2000}
+function selectedDuration(){const max=pumpMax();return Math.round(clamp(Number($('pumpDurationNumber').value),250,max))}
+function syncPumpInputs(source){
+  const max=pumpMax();
+  const range=$('pumpDuration');
+  const number=$('pumpDurationNumber');
+  range.max=max;
+  number.max=max;
+  const raw=source==='range'?Number(range.value):Number(number.value);
+  const value=clamp(raw,250,max);
+  range.value=value;
+  number.value=value;
+  text('pumpDurationText',value+' ms');
+}
+function addLivePoint(s){
+  const t=Number(s.uptime_ms||0);
+  if(t===lastStatusUptime)return;
+  lastStatusUptime=t;
+  historyPoints.push({t:t,raw:Number(s.moisture_adc_raw||0),avg:Number(s.moisture_adc_avg||0),clients:Number(s.ap_clients||0),pump:!!s.pump_running});
+  while(historyPoints.length>MAX_POINTS)historyPoints.shift();
+}
+async function loadHistory(){
+  try{
+    const r=await fetch('/api/history',{cache:'no-store'});
+    const h=await r.json();
+    if(Array.isArray(h.points)){
+      historyPoints=h.points.slice(-MAX_POINTS);
+      if(historyPoints.length){lastStatusUptime=historyPoints[historyPoints.length-1].t}
+    }
+    text('chartHint',historyPoints.length+' points');
+    drawCharts();
+  }catch(e){text('chartHint','history unavailable')}
+}
+async function refreshStatus(){
+  try{
+    const r=await fetch('/api/status',{cache:'no-store'});
+    const s=await r.json();
+    latestStatus=s;
+    syncPumpInputs();
+    text('versionPill',s.name+' '+s.version);
+    text('pumpState',s.pump_running?'RUNNING':'ready');
+    text('pumpRemaining',s.pump_running?('remaining '+ms(s.pump_remaining_ms)):('max '+ms(s.pump_max_runtime_ms)));
+    $('pumpBtn').disabled=!!s.pump_running;
+    text('moistureRaw',s.moisture_adc_raw);
+    text('moistureAvg',s.moisture_adc_avg);
+    const b=$('moistureBand');b.textContent=s.moisture_band;b.className='band '+bandClass(s.moisture_band);
+    text('moistureRange',s.moisture_adc_min+' / '+s.moisture_adc_max);
+    text('moistureSpan','span '+s.moisture_adc_span);
+    text('apClients',s.ap_clients);
+    text('apClientEvents','joins '+s.ap_connect_events+' / max '+s.ap_max_clients);
+    text('tp6State',yn(s.reservoir_sw_low));
+    text('tp10State',yn(s.flow_input_low));
+    text('flowPulseState',s.flow_pulses);
+    text('pumpPulseState',s.pump_pulses);
+    text('ledFlashState',s.led_flash_count);
+    text('ledFlashDetails','red '+s.led_flash_red+' / green '+s.led_flash_green+' / both '+s.led_flash_both);
+    text('sampleCount',s.samples);
+    text('staStatus',s.sta_status);
+    text('staDetails',s.sta_configured?(s.sta_ssid+(s.sta_ip?' at '+s.sta_ip:'')):'not configured');
+    if(!$('ssidInput').value&&s.sta_ssid){$('ssidInput').value=s.sta_ssid}
+    text('status',JSON.stringify(s,null,2));
+    addLivePoint(s);
+    text('chartHint',historyPoints.length+' points');
+    drawCharts();
+  }catch(e){text('status','Status read failed: '+e)}
+}
+async function flashLed(which){await fetch('/api/flash?led='+encodeURIComponent(which),{method:'POST'});refreshStatus()}
+async function resetStats(){await fetch('/api/reset-stats',{method:'POST'});historyPoints=[];lastStatusUptime=-1;await loadHistory();refreshStatus()}
+async function saveWifi(e){e.preventDefault();const fd=new FormData(e.target);const r=await fetch('/api/wifi',{method:'POST',body:new URLSearchParams(fd)});text('wifiMessage',await r.text());setTimeout(refreshStatus,1000)}
+async function clearWifi(){const r=await fetch('/api/wifi/clear',{method:'POST'});text('wifiMessage',await r.text());refreshStatus()}
+async function runPump(){
+  const duration=selectedDuration();
+  if(!localStorage.getItem('pumpWarned')){
+    const ok=confirm('First pump test warning: use a dedicated 5 V supply, keep water away from the board, confirm MOSFET/diode orientation, and expect only the selected capped pulse. Run pump now?');
+    if(!ok)return;
+    localStorage.setItem('pumpWarned','yes');
+  }
+  const body=new URLSearchParams({duration_ms:String(duration),confirm:'pump-test'});
+  const r=await fetch('/api/pump',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});
+  if(!r.ok){alert(await r.text())}
+  refreshStatus();
+}
+function downloadExport(){window.location.href='/api/export';setTimeout(refreshStatus,1200)}
+function prepCanvas(id){
+  const canvas=$(id);if(!canvas)return null;
+  const rect=canvas.getBoundingClientRect();
+  const w=Math.max(260,Math.floor(rect.width||canvas.parentElement.clientWidth||300));
+  const h=190;
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=Math.floor(w*dpr);canvas.height=Math.floor(h*dpr);
+  const ctx=canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='#d7ddd2';ctx.lineWidth=1;ctx.strokeRect(.5,.5,w-1,h-1);
+  ctx.font='12px system-ui,-apple-system,Segoe UI,sans-serif';
+  return {ctx:ctx,w:w,h:h,pad:30};
+}
+function noData(c){c.ctx.fillStyle='#66705f';c.ctx.fillText('Waiting for data',c.pad,c.h/2)}
+function drawSeries(c,key,color,width,maxValue){
+  const pts=historyPoints;if(!pts.length)return;
+  const left=c.pad,right=c.w-10,top=18,bottom=c.h-24,span=Math.max(1,right-left);
+  c.ctx.beginPath();c.ctx.strokeStyle=color;c.ctx.lineWidth=width;
+  pts.forEach((p,i)=>{const x=left+(pts.length===1?0:(i/(pts.length-1))*span);const v=clamp(Number(p[key]||0),0,maxValue);const y=bottom-(v/maxValue)*(bottom-top);if(i===0)c.ctx.moveTo(x,y);else c.ctx.lineTo(x,y)});
+  c.ctx.stroke();
+}
+function drawMoistureChart(){
+  const c=prepCanvas('moistureChart');if(!c)return;
+  c.ctx.fillStyle='#66705f';c.ctx.fillText('4095 dry',c.pad,14);c.ctx.fillText('0 wet',c.pad,c.h-8);
+  c.ctx.strokeStyle='#eef1ec';for(let i=1;i<4;i++){const y=18+i*((c.h-42)/4);c.ctx.beginPath();c.ctx.moveTo(c.pad,y);c.ctx.lineTo(c.w-10,y);c.ctx.stroke()}
+  if(!historyPoints.length){noData(c);return}
+  drawSeries(c,'raw','#9aa59a',1,4095);
+  drawSeries(c,'avg','#245b3b',2.5,4095);
+}
+function drawClientChart(){
+  const c=prepCanvas('clientChart');if(!c)return;
+  const maxValue=Math.max(4,...historyPoints.map(p=>Number(p.clients||0)));
+  c.ctx.fillStyle='#66705f';c.ctx.fillText(maxValue+' clients',c.pad,14);c.ctx.fillText('0',c.pad,c.h-8);
+  if(!historyPoints.length){noData(c);return}
+  drawSeries(c,'clients','#28628f',2.5,maxValue);
+}
+function drawEventChart(){
+  const c=prepCanvas('eventChart');if(!c)return;
+  const s=latestStatus||{};
+  const bars=[
+    ['Pump',Number(s.pump_pulses||0),'#b33a22'],
+    ['LED',Number(s.led_flash_count||0),'#245b3b'],
+    ['AP joins',Number(s.ap_connect_events||0),'#28628f'],
+    ['Flow',Number(s.flow_pulses||0),'#555'],
+    ['Exports',Number(s.export_count||0),'#7a4a16']
+  ];
+  const maxValue=Math.max(1,...bars.map(b=>b[1]));
+  const left=16,top=20,barH=22,gap=12,usable=c.w-120;
+  c.ctx.font='12px system-ui,-apple-system,Segoe UI,sans-serif';
+  bars.forEach((b,i)=>{const y=top+i*(barH+gap);const w=(b[1]/maxValue)*usable;c.ctx.fillStyle=b[2];c.ctx.fillRect(left+72,y,Math.max(2,w),barH);c.ctx.fillStyle='#172018';c.ctx.fillText(b[0],left,y+16);c.ctx.fillText(String(b[1]),left+78+w,y+16)});
+}
+function drawCharts(){
+  if(!$('chartsPanel').open)return;
+  drawMoistureChart();drawClientChart();drawEventChart();
+}
+$('pumpDuration').addEventListener('input',()=>syncPumpInputs('range'));
+$('pumpDurationNumber').addEventListener('input',()=>syncPumpInputs('number'));
+$('chartsPanel').addEventListener('toggle',drawCharts);
+window.addEventListener('resize',drawCharts);
+syncPumpInputs();
+loadHistory();
+refreshStatus();
+setInterval(refreshStatus,1000);
+</script></main></body></html>)HTML";
   return html;
 }
 
@@ -523,6 +906,14 @@ void startLedTest(const String &mode) {
   }
   ledTestMode = mode;
   ledTestUntilMs = millis() + 5000;
+  ledFlashCount++;
+  if (mode == "red") {
+    redLedFlashCount++;
+  } else if (mode == "green") {
+    greenLedFlashCount++;
+  } else {
+    bothLedFlashCount++;
+  }
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -531,6 +922,20 @@ void resetStatsEndpoint() {
   sampleMoistureNow();
   lastMoistureSampleMs = millis();
   resetFlowPulseCount();
+  noInterrupts();
+  apConnectEvents = 0;
+  apDisconnectEvents = 0;
+  interrupts();
+  ledFlashCount = 0;
+  redLedFlashCount = 0;
+  greenLedFlashCount = 0;
+  bothLedFlashCount = 0;
+  pumpPulseCount = 0;
+  exportCount = 0;
+  maxApClients = currentApClients();
+  resetHistory();
+  addHistoryPoint();
+  lastHistorySampleMs = millis();
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -631,6 +1036,15 @@ void setupWebServer() {
   server.on("/api/status", HTTP_GET, []() {
     server.send(200, "application/json", statusJson());
   });
+  server.on("/api/history", HTTP_GET, []() {
+    server.send(200, "application/json", historyJson());
+  });
+  server.on("/api/export", HTTP_GET, []() {
+    exportCount++;
+    server.sendHeader("Content-Disposition", "attachment; filename=flowerpot-session.json");
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "application/json", exportJson());
+  });
   server.on("/api/reset-stats", HTTP_POST, []() {
     resetStatsEndpoint();
   });
@@ -689,10 +1103,16 @@ void setup() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
   WiFi.setTxPower(WIFI_POWER_19_5dBm);
+  WiFi.onEvent(onWiFiEvent, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
+  WiFi.onEvent(onWiFiEvent, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
   wifi_country_t country = {"US", 1, 11, WIFI_COUNTRY_POLICY_MANUAL};
   esp_wifi_set_country(&country);
   WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
   const bool apStarted = WiFi.softAP(AP_SSID, AP_PASSWORD, 1, false, 4);
+  maxApClients = currentApClients();
+  resetHistory();
+  addHistoryPoint();
+  lastHistorySampleMs = millis();
   dnsServer.start(DNS_PORT, "*", AP_IP);
   setupWebServer();
   connectStaIfConfigured();
@@ -717,6 +1137,7 @@ void setup() {
 void loop() {
   servicePumpSafety();
   updateMoistureSampler();
+  updateHistorySampler();
   updateStaReconnect();
   dnsServer.processNextRequest();
   server.handleClient();
