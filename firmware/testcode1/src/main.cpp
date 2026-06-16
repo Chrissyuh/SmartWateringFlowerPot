@@ -3,12 +3,13 @@
 #include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <esp_system.h>
 #include <esp_wifi.h>
 
 namespace {
 
 constexpr char FIRMWARE_NAME[] = "testcode1";
-constexpr char FIRMWARE_VERSION[] = "pump-test-v2";
+constexpr char FIRMWARE_VERSION[] = "pump-diagnostics-v3";
 
 constexpr uint8_t PIN_MOISTURE_ADC = 1;
 constexpr uint8_t PIN_PUMP_GATE = 4;
@@ -74,8 +75,26 @@ bool pumpRunning = false;
 uint32_t pumpStartedMs = 0;
 uint32_t pumpUntilMs = 0;
 uint32_t pumpPulseCount = 0;
+uint32_t pumpAttemptCount = 0;
+uint32_t pumpRejectedAuthCount = 0;
+uint32_t pumpRejectedBusyCount = 0;
+uint32_t pumpCompletedCount = 0;
+uint32_t lastPumpRequestedMs = 0;
+uint32_t lastPumpActualMs = 0;
+String lastPumpStopReason = "never_started";
 uint32_t exportCount = 0;
 uint8_t maxApClients = 0;
+
+bool preferencesReady = false;
+uint32_t bootCount = 0;
+esp_reset_reason_t bootResetReason = ESP_RST_UNKNOWN;
+bool previousBootPumpActive = false;
+uint32_t pumpInterruptedBootCount = 0;
+uint32_t previousPumpRequestedMs = 0;
+uint32_t previousPumpBootCount = 0;
+uint32_t loopCount = 0;
+uint32_t maxLoopGapMs = 0;
+uint32_t lastLoopStartedMs = 0;
 
 struct HistoryPoint {
   uint32_t uptimeMs;
@@ -97,23 +116,53 @@ uint32_t lastSerialUiAnnounceMs = 0;
 String statusJson();
 String historyJson();
 String exportJson();
+String diagnosticsJson();
 void addHistoryPoint();
 
 void IRAM_ATTR onFlowPulse() {
   flowPulseCount++;
 }
 
-void setPumpOff() {
+void markPumpNvsActive(uint32_t requestedMs) {
+  if (!preferencesReady) {
+    return;
+  }
+  preferences.putBool("pump_active", true);
+  preferences.putUInt("pump_req_ms", requestedMs);
+  preferences.putUInt("pump_boot", bootCount);
+}
+
+void clearPumpNvsActive() {
+  if (!preferencesReady) {
+    return;
+  }
+  preferences.putBool("pump_active", false);
+}
+
+void setPumpOff(const String &reason = "forced_off") {
+  const bool wasRunning = pumpRunning;
+  const uint32_t now = millis();
+  if (wasRunning) {
+    lastPumpActualMs = now - pumpStartedMs;
+    lastPumpStopReason = reason;
+    if (reason == "runtime_elapsed") {
+      pumpCompletedCount++;
+    }
+  }
   pumpRunning = false;
   pumpStartedMs = 0;
   pumpUntilMs = 0;
   digitalWrite(PIN_PUMP_GATE, PUMP_OFF);
+  if (wasRunning) {
+    clearPumpNvsActive();
+    addHistoryPoint();
+  }
 }
 
 void servicePumpSafety() {
   const uint32_t now = millis();
   if (pumpRunning && static_cast<int32_t>(now - pumpUntilMs) >= 0) {
-    setPumpOff();
+    setPumpOff("runtime_elapsed");
     return;
   }
   digitalWrite(PIN_PUMP_GATE, pumpRunning ? PUMP_ON : PUMP_OFF);
@@ -133,6 +182,7 @@ uint32_t pumpRemainingMs() {
 bool startPumpPulse(uint32_t requestedMs) {
   servicePumpSafety();
   if (pumpRunning) {
+    pumpRejectedBusyCount++;
     return false;
   }
   if (requestedMs == 0 || requestedMs > PUMP_MAX_RUNTIME_MS) {
@@ -140,6 +190,10 @@ bool startPumpPulse(uint32_t requestedMs) {
   }
 
   const uint32_t now = millis();
+  lastPumpRequestedMs = requestedMs;
+  lastPumpActualMs = 0;
+  lastPumpStopReason = "running";
+  markPumpNvsActive(requestedMs);
   pumpRunning = true;
   pumpStartedMs = now;
   pumpUntilMs = now + requestedMs;
@@ -209,6 +263,56 @@ String jsonEscape(const String &value) {
     else out += c;
   }
   return out;
+}
+
+String resetReasonName(esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_POWERON:
+      return "power_on";
+    case ESP_RST_EXT:
+      return "external_reset";
+    case ESP_RST_SW:
+      return "software_reset";
+    case ESP_RST_PANIC:
+      return "panic_exception";
+    case ESP_RST_INT_WDT:
+      return "interrupt_watchdog";
+    case ESP_RST_TASK_WDT:
+      return "task_watchdog";
+    case ESP_RST_WDT:
+      return "other_watchdog";
+    case ESP_RST_DEEPSLEEP:
+      return "deep_sleep";
+    case ESP_RST_BROWNOUT:
+      return "brownout";
+    case ESP_RST_SDIO:
+      return "sdio";
+    default:
+      return "unknown";
+  }
+}
+
+String flashModeName(FlashMode_t mode) {
+  switch (mode) {
+    case FM_QIO:
+      return "qio";
+    case FM_QOUT:
+      return "qout";
+    case FM_DIO:
+      return "dio";
+    case FM_DOUT:
+      return "dout";
+    default:
+      return "unknown";
+  }
+}
+
+float safeTemperatureC() {
+  const float temp = temperatureRead();
+  if (isnan(temp) || temp < -80.0f || temp > 160.0f) {
+    return NAN;
+  }
+  return temp;
 }
 
 void resetMoistureStats() {
@@ -409,7 +513,13 @@ void printUsbUiBanner() {
   Serial.println(staUrl);
   Serial.print("PUMP_MAX_RUNTIME_MS=");
   Serial.println(PUMP_MAX_RUNTIME_MS);
-  Serial.println("COMMANDS=ui,status,help");
+  Serial.print("RESET_REASON=");
+  Serial.println(resetReasonName(bootResetReason));
+  Serial.print("BOOT_COUNT=");
+  Serial.println(bootCount);
+  Serial.print("PREVIOUS_BOOT_PUMP_ACTIVE=");
+  Serial.println(previousBootPumpActive ? "true" : "false");
+  Serial.println("COMMANDS=ui,status,diag,help");
   Serial.println("FLOWERPOT_UI_END");
 }
 
@@ -417,6 +527,7 @@ void printSerialHelp() {
   Serial.println("FLOWERPOT_HELP_BEGIN");
   Serial.println("ui     - print browser UI URL hints");
   Serial.println("status - print /api/status JSON");
+  Serial.println("diag   - print /api/diagnostics JSON");
   Serial.println("help   - print this command list");
   Serial.println("FLOWERPOT_HELP_END");
 }
@@ -434,6 +545,8 @@ void handleSerialCommand(String command) {
     printUsbUiBanner();
   } else if (lower == "status") {
     Serial.println(statusJson());
+  } else if (lower == "diag" || lower == "diagnostics") {
+    Serial.println(diagnosticsJson());
   } else if (lower == "help" || lower == "?") {
     printSerialHelp();
   } else {
@@ -483,8 +596,20 @@ void connectStaIfConfigured() {
 
 void loadWifiSettings() {
   preferences.begin("flowerpot", false);
+  preferencesReady = true;
   savedStaSsid = preferences.getString("sta_ssid", "");
   savedStaPassword = preferences.getString("sta_pass", "");
+  bootCount = preferences.getUInt("boot_count", 0) + 1;
+  preferences.putUInt("boot_count", bootCount);
+  previousBootPumpActive = preferences.getBool("pump_active", false);
+  previousPumpRequestedMs = preferences.getUInt("pump_req_ms", 0);
+  previousPumpBootCount = preferences.getUInt("pump_boot", 0);
+  pumpInterruptedBootCount = preferences.getUInt("pump_intr", 0);
+  if (previousBootPumpActive) {
+    pumpInterruptedBootCount++;
+    preferences.putUInt("pump_intr", pumpInterruptedBootCount);
+    preferences.putBool("pump_active", false);
+  }
 }
 
 void updateStaReconnect() {
@@ -513,6 +638,10 @@ String statusJson() {
   json += "\"name\":\"" + String(FIRMWARE_NAME) + "\",";
   json += "\"version\":\"" + String(FIRMWARE_VERSION) + "\",";
   json += "\"uptime_ms\":" + String(now) + ",";
+  json += "\"boot_count\":" + String(bootCount) + ",";
+  json += "\"reset_reason\":\"" + jsonEscape(resetReasonName(bootResetReason)) + "\",";
+  json += "\"previous_boot_pump_active\":" + String(previousBootPumpActive ? "true" : "false") + ",";
+  json += "\"pump_interrupted_boots\":" + String(pumpInterruptedBootCount) + ",";
   json += "\"mac\":\"" + WiFi.macAddress() + "\",";
   json += "\"ap_ssid\":\"" + String(AP_SSID) + "\",";
   json += "\"ap_ip\":\"" + WiFi.softAPIP().toString() + "\",";
@@ -540,6 +669,13 @@ String statusJson() {
   json += "\"pump_remaining_ms\":" + String(pumpRemainingMs()) + ",";
   json += "\"pump_max_runtime_ms\":" + String(PUMP_MAX_RUNTIME_MS) + ",";
   json += "\"pump_pulses\":" + String(pumpPulseCount) + ",";
+  json += "\"pump_attempts\":" + String(pumpAttemptCount) + ",";
+  json += "\"pump_completed\":" + String(pumpCompletedCount) + ",";
+  json += "\"pump_rejected_busy\":" + String(pumpRejectedBusyCount) + ",";
+  json += "\"pump_rejected_auth\":" + String(pumpRejectedAuthCount) + ",";
+  json += "\"last_pump_requested_ms\":" + String(lastPumpRequestedMs) + ",";
+  json += "\"last_pump_actual_ms\":" + String(lastPumpActualMs) + ",";
+  json += "\"last_pump_stop_reason\":\"" + jsonEscape(lastPumpStopReason) + "\",";
   json += "\"led_test\":\"" + jsonEscape(ledTestMode) + "\",";
   json += "\"led_test_remaining_ms\":" + String(ledTestUntilMs > now ? ledTestUntilMs - now : 0) + ",";
   json += "\"led_flash_count\":" + String(ledFlashCount) + ",";
@@ -640,6 +776,166 @@ String exportJson() {
   return json;
 }
 
+String diagnosticsJson() {
+  servicePumpSafety();
+  updateMaxApClients();
+  const uint32_t now = millis();
+  const float tempC = safeTemperatureC();
+  const bool staConnected = WiFi.status() == WL_CONNECTED;
+
+  String json;
+  json.reserve(5200);
+  json += F("{\"name\":\"");
+  json += FIRMWARE_NAME;
+  json += F("\",\"version\":\"");
+  json += FIRMWARE_VERSION;
+  json += F("\",\"uptime_ms\":");
+  json += String(now);
+  json += F(",\"boot\":{\"count\":");
+  json += String(bootCount);
+  json += F(",\"reset_reason_code\":");
+  json += String(static_cast<int>(bootResetReason));
+  json += F(",\"reset_reason\":\"");
+  json += jsonEscape(resetReasonName(bootResetReason));
+  json += F("\",\"previous_boot_pump_active\":");
+  json += String(previousBootPumpActive ? "true" : "false");
+  json += F(",\"pump_interrupted_boots\":");
+  json += String(pumpInterruptedBootCount);
+  json += F(",\"previous_pump_requested_ms\":");
+  json += String(previousPumpRequestedMs);
+  json += F(",\"previous_pump_boot_count\":");
+  json += String(previousPumpBootCount);
+  json += F("},\"power\":{\"rail_voltage_measurement\":\"not_available_on_this_pcb\",\"note\":\"Use TP1-TP2 for 5V and TP3-TP2 for 3V3 with a multimeter.\"}");
+  json += F(",\"chip\":{\"model\":\"");
+  json += ESP.getChipModel();
+  json += F("\",\"revision\":");
+  json += String(ESP.getChipRevision());
+  json += F(",\"cores\":");
+  json += String(ESP.getChipCores());
+  json += F(",\"cpu_mhz\":");
+  json += String(ESP.getCpuFreqMHz());
+  json += F(",\"sdk\":\"");
+  json += ESP.getSdkVersion();
+  json += F("\",\"temperature_c\":");
+  json += isnan(tempC) ? String("null") : String(tempC, 1);
+  json += F("},\"memory\":{\"heap_size\":");
+  json += String(ESP.getHeapSize());
+  json += F(",\"free_heap\":");
+  json += String(ESP.getFreeHeap());
+  json += F(",\"min_free_heap\":");
+  json += String(ESP.getMinFreeHeap());
+  json += F(",\"max_alloc_heap\":");
+  json += String(ESP.getMaxAllocHeap());
+  json += F(",\"psram_size\":");
+  json += String(ESP.getPsramSize());
+  json += F(",\"free_psram\":");
+  json += String(ESP.getFreePsram());
+  json += F("},\"flash\":{\"chip_size\":");
+  json += String(ESP.getFlashChipSize());
+  json += F(",\"chip_speed\":");
+  json += String(ESP.getFlashChipSpeed());
+  json += F(",\"chip_mode\":\"");
+  json += flashModeName(ESP.getFlashChipMode());
+  json += F("\",\"sketch_size\":");
+  json += String(ESP.getSketchSize());
+  json += F(",\"free_sketch_space\":");
+  json += String(ESP.getFreeSketchSpace());
+  json += F("},\"wifi\":{\"ap_ssid\":\"");
+  json += AP_SSID;
+  json += F("\",\"ap_ip\":\"");
+  json += WiFi.softAPIP().toString();
+  json += F("\",\"ap_mac\":\"");
+  json += WiFi.softAPmacAddress();
+  json += F("\",\"ap_clients\":");
+  json += String(currentApClients());
+  json += F(",\"ap_max_clients\":");
+  json += String(maxApClients);
+  json += F(",\"ap_connect_events\":");
+  json += String(readApConnectEvents());
+  json += F(",\"ap_disconnect_events\":");
+  json += String(readApDisconnectEvents());
+  json += F(",\"sta_configured\":");
+  json += String(savedStaSsid.length() ? "true" : "false");
+  json += F(",\"sta_ssid\":\"");
+  json += jsonEscape(savedStaSsid);
+  json += F("\",\"sta_status\":\"");
+  json += jsonEscape(staStatusText());
+  json += F("\",\"sta_ip\":\"");
+  json += staConnected ? WiFi.localIP().toString() : String("");
+  json += F("\",\"sta_rssi\":");
+  json += staConnected ? String(WiFi.RSSI()) : String("null");
+  json += F(",\"channel\":");
+  json += String(WiFi.channel());
+  json += F("},\"gpio\":{\"pump_gate_gpio\":");
+  json += String(PIN_PUMP_GATE);
+  json += F(",\"pump_gate_level\":");
+  json += String(digitalRead(PIN_PUMP_GATE));
+  json += F(",\"reservoir_gpio\":");
+  json += String(PIN_RESERVOIR_SW);
+  json += F(",\"reservoir_low\":");
+  json += String(digitalRead(PIN_RESERVOIR_SW) == LOW ? "true" : "false");
+  json += F(",\"flow_gpio\":");
+  json += String(PIN_FLOW_PULSE);
+  json += F(",\"flow_low\":");
+  json += String(digitalRead(PIN_FLOW_PULSE) == LOW ? "true" : "false");
+  json += F(",\"moisture_adc_gpio\":");
+  json += String(PIN_MOISTURE_ADC);
+  json += F(",\"error_led_gpio\":");
+  json += String(PIN_ERROR_LED);
+  json += F(",\"status_led_gpio\":");
+  json += String(PIN_STATUS_LED);
+  json += F("},\"moisture\":{\"raw\":");
+  json += String(moistureRaw);
+  json += F(",\"avg\":");
+  json += String(moistureAverage());
+  json += F(",\"min\":");
+  json += String(moistureMinValue());
+  json += F(",\"max\":");
+  json += String(moistureMaxValue());
+  json += F(",\"span\":");
+  json += String(moistureSpan());
+  json += F(",\"band\":\"");
+  json += jsonEscape(moistureBand());
+  json += F("\",\"samples\":");
+  json += String(moistureSampleCount);
+  json += F(",\"sample_interval_ms\":");
+  json += String(MOISTURE_SAMPLE_INTERVAL_MS);
+  json += F("},\"pump\":{\"running\":");
+  json += String(pumpRunning ? "true" : "false");
+  json += F(",\"remaining_ms\":");
+  json += String(pumpRemainingMs());
+  json += F(",\"max_runtime_ms\":");
+  json += String(PUMP_MAX_RUNTIME_MS);
+  json += F(",\"pulses_started\":");
+  json += String(pumpPulseCount);
+  json += F(",\"attempts\":");
+  json += String(pumpAttemptCount);
+  json += F(",\"completed\":");
+  json += String(pumpCompletedCount);
+  json += F(",\"rejected_busy\":");
+  json += String(pumpRejectedBusyCount);
+  json += F(",\"rejected_auth\":");
+  json += String(pumpRejectedAuthCount);
+  json += F(",\"last_requested_ms\":");
+  json += String(lastPumpRequestedMs);
+  json += F(",\"last_actual_ms\":");
+  json += String(lastPumpActualMs);
+  json += F(",\"last_stop_reason\":\"");
+  json += jsonEscape(lastPumpStopReason);
+  json += F("\"},\"runtime\":{\"loop_count\":");
+  json += String(loopCount);
+  json += F(",\"max_loop_gap_ms\":");
+  json += String(maxLoopGapMs);
+  json += F(",\"history_count\":");
+  json += String(historyCount);
+  json += F(",\"history_capacity\":");
+  json += String(HISTORY_CAPACITY);
+  json += F(",\"export_count\":");
+  json += String(exportCount);
+  json += F("}}");
+  return json;
+}
+
 String pageHtml() {
   const String mac = WiFi.macAddress();
   String html;
@@ -702,6 +998,15 @@ details.panel{padding:0}summary{cursor:pointer;list-style:none;padding:12px;font
   <div class="card"><div class="k">Samples</div><div class="v" id="sampleCount">...</div></div>
 </section>
 
+<section class="grid">
+  <div class="card"><div class="k">Reset reason</div><div class="v" id="resetReason">...</div><div class="small" id="bootState">...</div></div>
+  <div class="card"><div class="k">Pump reset clue</div><div class="v" id="prevPumpState">...</div><div class="small" id="prevPumpDetails">...</div></div>
+  <div class="card"><div class="k">Heap free</div><div class="v" id="heapState">...</div><div class="small" id="heapDetails">...</div></div>
+  <div class="card"><div class="k">Chip temp</div><div class="v" id="tempState">...</div><div class="small" id="chipDetails">...</div></div>
+  <div class="card"><div class="k">Loop health</div><div class="v" id="loopState">...</div><div class="small" id="loopDetails">...</div></div>
+  <div class="card"><div class="k">Flash/sketch</div><div class="v" id="flashState">...</div><div class="small" id="flashDetails">...</div></div>
+</section>
+
 <details class="panel" open id="chartsPanel"><summary><span>Charts</span><span class="tiny" id="chartHint">loading history</span></summary>
 <div class="details-body">
   <div class="chart-grid">
@@ -716,6 +1021,13 @@ details.panel{padding:0}summary{cursor:pointer;list-style:none;padding:12px;font
 <div class="small">Downloads JSON with firmware version, Wi-Fi/client counters, pump/LED counters, moisture stats, and the device history buffer.</div>
 <div class="button-row"><button class="blue" onclick="downloadExport()">Download session JSON</button><button class="gray" onclick="loadHistory()">Reload history</button></div>
 </section>
+
+<details class="panel" open><summary><span>Deep Diagnostics</span><span class="tiny">ESP/system dump</span></summary>
+<div class="details-body">
+  <div class="small">Firmware cannot directly measure the board rails on this PCB. Use TP1-TP2 for 5V and TP3-TP2 for 3V3.</div>
+  <div class="button-row"><button class="gray" onclick="refreshDiagnostics()">Refresh diagnostics</button><button class="blue" onclick="downloadDiagnostics()">Download diagnostics JSON</button></div>
+  <pre id="diagnostics">Loading...</pre>
+</div></details>
 
 <section class="grid">
   <div class="card"><div class="k">AP SSID</div><div class="v">)HTML";
@@ -740,12 +1052,14 @@ details.panel{padding:0}summary{cursor:pointer;list-style:none;padding:12px;font
 const MAX_POINTS=360;
 let historyPoints=[];
 let latestStatus=null;
+let latestDiagnostics=null;
 let lastStatusUptime=-1;
 function $(id){return document.getElementById(id)}
 function text(id,v){const e=$(id);if(e)e.textContent=v}
 function yn(v){return v?'SHORTED':'open'}
 function bandClass(v){return String(v||'starting').replace(/ /g,'-')}
 function ms(v){return Math.max(0,Math.ceil(Number(v||0)))+' ms'}
+function bytes(v){v=Number(v||0);if(v>1048576)return (v/1048576).toFixed(1)+' MB';if(v>1024)return (v/1024).toFixed(1)+' KB';return v+' B'}
 function clamp(v,min,max){return Math.min(max,Math.max(min,Number.isFinite(v)?v:min))}
 function pumpMax(){return Number(latestStatus&&latestStatus.pump_max_runtime_ms)||2000}
 function selectedDuration(){const max=pumpMax();return Math.round(clamp(Number($('pumpDurationNumber').value),250,max))}
@@ -813,6 +1127,26 @@ async function refreshStatus(){
     drawCharts();
   }catch(e){text('status','Status read failed: '+e)}
 }
+async function refreshDiagnostics(){
+  try{
+    const r=await fetch('/api/diagnostics',{cache:'no-store'});
+    const d=await r.json();
+    latestDiagnostics=d;
+    text('resetReason',d.boot.reset_reason);
+    text('bootState','boot '+d.boot.count+' / uptime '+Math.floor((d.uptime_ms||0)/1000)+'s');
+    text('prevPumpState',d.boot.previous_boot_pump_active?'YES':'no');
+    text('prevPumpDetails','interrupts '+d.boot.pump_interrupted_boots+' / prev req '+d.boot.previous_pump_requested_ms+' ms');
+    text('heapState',bytes(d.memory.free_heap));
+    text('heapDetails','min '+bytes(d.memory.min_free_heap)+' / max block '+bytes(d.memory.max_alloc_heap));
+    text('tempState',d.chip.temperature_c===null?'n/a':(d.chip.temperature_c+' C'));
+    text('chipDetails',d.chip.model+' rev '+d.chip.revision+' / '+d.chip.cpu_mhz+' MHz');
+    text('loopState',d.runtime.max_loop_gap_ms+' ms');
+    text('loopDetails','loops '+d.runtime.loop_count+' / history '+d.runtime.history_count+'/'+d.runtime.history_capacity);
+    text('flashState',bytes(d.flash.sketch_size));
+    text('flashDetails','free '+bytes(d.flash.free_sketch_space)+' / mode '+d.flash.chip_mode);
+    text('diagnostics',JSON.stringify(d,null,2));
+  }catch(e){text('diagnostics','Diagnostics read failed: '+e)}
+}
 async function flashLed(which){await fetch('/api/flash?led='+encodeURIComponent(which),{method:'POST'});refreshStatus()}
 async function resetStats(){await fetch('/api/reset-stats',{method:'POST'});historyPoints=[];lastStatusUptime=-1;await loadHistory();refreshStatus()}
 async function saveWifi(e){e.preventDefault();const fd=new FormData(e.target);const r=await fetch('/api/wifi',{method:'POST',body:new URLSearchParams(fd)});text('wifiMessage',await r.text());setTimeout(refreshStatus,1000)}
@@ -830,6 +1164,7 @@ async function runPump(){
   refreshStatus();
 }
 function downloadExport(){window.location.href='/api/export';setTimeout(refreshStatus,1200)}
+function downloadDiagnostics(){window.location.href='/api/diagnostics?download=1';setTimeout(refreshDiagnostics,1200)}
 function prepCanvas(id){
   const canvas=$(id);if(!canvas)return null;
   const rect=canvas.getBoundingClientRect();
@@ -894,7 +1229,9 @@ window.addEventListener('resize',drawCharts);
 syncPumpInputs();
 loadHistory();
 refreshStatus();
+refreshDiagnostics();
 setInterval(refreshStatus,1000);
+setInterval(refreshDiagnostics,3000);
 </script></main></body></html>)HTML";
   return html;
 }
@@ -931,6 +1268,13 @@ void resetStatsEndpoint() {
   greenLedFlashCount = 0;
   bothLedFlashCount = 0;
   pumpPulseCount = 0;
+  pumpAttemptCount = 0;
+  pumpRejectedAuthCount = 0;
+  pumpRejectedBusyCount = 0;
+  pumpCompletedCount = 0;
+  lastPumpRequestedMs = 0;
+  lastPumpActualMs = 0;
+  lastPumpStopReason = "stats_reset";
   exportCount = 0;
   maxApClients = currentApClients();
   resetHistory();
@@ -940,7 +1284,9 @@ void resetStatsEndpoint() {
 }
 
 void pumpEndpoint() {
+  pumpAttemptCount++;
   if (server.arg("confirm") != PUMP_CONFIRM_TOKEN) {
+    pumpRejectedAuthCount++;
     server.send(403, "text/plain", "Pump request rejected: missing confirmation token.");
     return;
   }
@@ -1036,6 +1382,13 @@ void setupWebServer() {
   server.on("/api/status", HTTP_GET, []() {
     server.send(200, "application/json", statusJson());
   });
+  server.on("/api/diagnostics", HTTP_GET, []() {
+    if (server.hasArg("download")) {
+      server.sendHeader("Content-Disposition", "attachment; filename=flowerpot-diagnostics.json");
+    }
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "application/json", diagnosticsJson());
+  });
   server.on("/api/history", HTTP_GET, []() {
     server.send(200, "application/json", historyJson());
   });
@@ -1073,6 +1426,7 @@ void setupWebServer() {
 }  // namespace
 
 void setup() {
+  bootResetReason = esp_reset_reason();
   pinMode(PIN_PUMP_GATE, OUTPUT);
   setPumpOff();
   pinMode(PIN_ERROR_LED, OUTPUT);
@@ -1098,6 +1452,8 @@ void setup() {
   Serial.print(" ");
   Serial.println(FIRMWARE_VERSION);
   Serial.println("Pump test is enabled with a 2000 ms firmware cap.");
+  Serial.print("Reset reason: ");
+  Serial.println(resetReasonName(bootResetReason));
 
   loadWifiSettings();
   WiFi.mode(WIFI_AP_STA);
@@ -1135,6 +1491,15 @@ void setup() {
 }
 
 void loop() {
+  const uint32_t loopStartedMs = millis();
+  if (lastLoopStartedMs != 0) {
+    const uint32_t gap = loopStartedMs - lastLoopStartedMs;
+    if (gap > maxLoopGapMs) {
+      maxLoopGapMs = gap;
+    }
+  }
+  lastLoopStartedMs = loopStartedMs;
+  loopCount++;
   servicePumpSafety();
   updateMoistureSampler();
   updateHistorySampler();

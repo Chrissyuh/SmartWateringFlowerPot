@@ -35,6 +35,7 @@ The UI shows:
 
 - pump ready/running state and remaining runtime
 - adjustable manual pump pulse control with first-use warning and a 2-second firmware cap
+- reset reason, boot count, previous-pump-reset clue, heap, chip temperature, loop health, and flash/sketch diagnostic cards
 - home Wi-Fi settings form
 - USB serial UI hints for Windows opener scripts
 - moisture raw ADC value
@@ -49,12 +50,18 @@ The UI shows:
 - 5-second LED test buttons for red, green, or both LEDs
 - reset-stats button for the current session counters and history
 - session JSON download for firmware version, counters, moisture stats, and history points
+- deep diagnostics JSON view/download
 
 ## API
 
 - `GET /api/status`
   - Keeps the original bring-up fields: `moisture_adc_raw`, `reservoir_sw_low`, `flow_input_low`, `flow_pulses`, and `pump`.
-  - Adds Wi-Fi state, pump state, moisture average/min/max/span, `moisture_band`, sample count, pump/LED counters, AP client counters, and history metadata.
+  - Adds Wi-Fi state, pump state, moisture average/min/max/span, `moisture_band`, sample count, pump/LED counters, AP client counters, reset reason, boot count, and history metadata.
+- `GET /api/diagnostics`
+  - Returns the full diagnostic dump used by the hosted page.
+  - Includes reset reason, persistent boot count, previous boot died-during-pump marker, heap/flash/sketch information, chip temperature, Wi-Fi state, GPIO levels, pump counters, and loop-health counters.
+  - Add `?download=1` to download `flowerpot-diagnostics.json`.
+  - Firmware cannot directly measure the 5 V or 3.3 V rails on this PCB; use `TP1-TP2` and `TP3-TP2` with a meter.
 - `GET /api/history`
   - Returns the rolling device history buffer.
   - Current interval is about `10 s`; current capacity is `360` points, or roughly the last hour.
@@ -91,6 +98,7 @@ USB serial commands:
 |---|---|
 | `ui` | Prints the UI URL block. |
 | `status` | Prints the same JSON as `GET /api/status`. |
+| `diag` | Prints the same JSON as `GET /api/diagnostics`. |
 | `help` | Prints available serial commands. |
 
 Windows helper scripts:

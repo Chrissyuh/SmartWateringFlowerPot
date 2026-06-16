@@ -18,6 +18,7 @@ It is a controlled pump-test build:
 - Tracks moisture raw, rolling average, min/max/span, and rough diagnostic band.
 - Records a rolling moisture/client history buffer and exposes collapsible charts in the hosted page.
 - Downloads a session JSON export with firmware identity, moisture stats/history, AP-client counters, LED-test counters, flow pulses, and pump-run count.
+- Exposes a deep diagnostics panel/API for reset reasons, boot count, pump-interrupted reset clues, heap/flash/sketch state, chip temperature, GPIO state, and loop health.
 - Shows live optional input short status for `TP6-TP7` and `TP10-TP9`.
 - Provides LED test buttons for the red and green board LEDs.
 
