@@ -7,10 +7,11 @@ This firmware is for the first controlled pump trial after the MOSFET has been i
 ## Safety behavior
 
 - GPIO4 `PUMP_GATE` starts LOW at boot.
-- Pump control is unlocked, but every pump request is capped in firmware at `2000 ms`.
+- Pump control is unlocked, but every pump request is capped in firmware at `10000 ms`.
 - The pump endpoint accepts only `POST` and requires a confirmation token.
 - The web UI shows a first-use browser warning before running the pump button.
-- The UI can request shorter pump pulses, but firmware still clamps every request to the hard `2000 ms` maximum.
+- The UI accepts pump pulses from `100 ms` through `10000 ms`, and firmware clamps every request to the hard 10-second maximum.
+- If the ESP32 reports a brownout reset, the red LED turns on solid for one second during the following boot while the pump remains forced off.
 - AP mode always stays enabled, even if the ESP32 joins home Wi-Fi.
 - Use a dedicated 5 V supply or USB power bank for pump tests. Do not run the pump from a laptop USB port.
 
@@ -34,7 +35,7 @@ This firmware is for the first controlled pump trial after the MOSFET has been i
 The UI shows:
 
 - pump ready/running state and remaining runtime
-- adjustable manual pump pulse control with first-use warning and a 2-second firmware cap
+- adjustable manual pump pulse control with first-use warning and a 10-second firmware cap
 - reset reason, boot count, previous-pump-reset clue, heap, chip temperature, loop health, and flash/sketch diagnostic cards
 - home Wi-Fi settings form
 - USB serial UI hints for Windows opener scripts
@@ -70,7 +71,7 @@ The UI shows:
   - Includes firmware identity, Wi-Fi state, counters, moisture summary, and the history buffer.
 - `POST /api/pump`
   - Body must include `confirm=pump-test`.
-  - Optional `duration_ms` is accepted but clamped to `2000`.
+  - Optional `duration_ms` is accepted but clamped to `10000`.
   - Returns HTTP `409` if the pump is already running.
 - `POST /api/wifi`
   - Body fields: `ssid`, `password`.

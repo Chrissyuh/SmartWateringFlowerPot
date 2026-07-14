@@ -9,7 +9,7 @@
 namespace {
 
 constexpr char FIRMWARE_NAME[] = "testcode1";
-constexpr char FIRMWARE_VERSION[] = "pump-diagnostics-v3";
+constexpr char FIRMWARE_VERSION[] = "pump-control-v4";
 
 constexpr uint8_t PIN_MOISTURE_ADC = 1;
 constexpr uint8_t PIN_PUMP_GATE = 4;
@@ -34,7 +34,8 @@ constexpr uint32_t MOISTURE_SAMPLE_INTERVAL_MS = 250;
 constexpr uint8_t MOISTURE_AVG_WINDOW = 16;
 constexpr uint16_t ADC_MAX_VALUE = 4095;
 
-constexpr uint32_t PUMP_MAX_RUNTIME_MS = 2000;
+constexpr uint32_t PUMP_MIN_RUNTIME_MS = 100;
+constexpr uint32_t PUMP_MAX_RUNTIME_MS = 10000;
 constexpr char PUMP_CONFIRM_TOKEN[] = "pump-test";
 constexpr uint32_t USB_UI_ANNOUNCE_INTERVAL_MS = 5000;
 constexpr uint32_t USB_UI_FAST_ANNOUNCE_UNTIL_MS = 30000;
@@ -185,8 +186,10 @@ bool startPumpPulse(uint32_t requestedMs) {
     pumpRejectedBusyCount++;
     return false;
   }
-  if (requestedMs == 0 || requestedMs > PUMP_MAX_RUNTIME_MS) {
+  if (requestedMs > PUMP_MAX_RUNTIME_MS) {
     requestedMs = PUMP_MAX_RUNTIME_MS;
+  } else if (requestedMs < PUMP_MIN_RUNTIME_MS) {
+    requestedMs = PUMP_MIN_RUNTIME_MS;
   }
 
   const uint32_t now = millis();
@@ -664,7 +667,7 @@ String statusJson() {
   json += "\"reservoir_sw_low\":" + String(reservoirLow ? "true" : "false") + ",";
   json += "\"flow_input_low\":" + String(flowLow ? "true" : "false") + ",";
   json += "\"flow_pulses\":" + String(flowCount) + ",";
-  json += "\"pump\":\"" + String(pumpRunning ? "running" : "ready_limited_2s") + "\",";
+  json += "\"pump\":\"" + String(pumpRunning ? "running" : "ready_limited_10s") + "\",";
   json += "\"pump_running\":" + String(pumpRunning ? "true" : "false") + ",";
   json += "\"pump_remaining_ms\":" + String(pumpRemainingMs()) + ",";
   json += "\"pump_max_runtime_ms\":" + String(PUMP_MAX_RUNTIME_MS) + ",";
@@ -956,18 +959,18 @@ details.panel{padding:0}summary{cursor:pointer;list-style:none;padding:12px;font
 @media(max-width:620px){main{padding:12px}header{display:block}.pill{margin-top:6px}.v{font-size:21px}.control-grid,.duration-row{grid-template-columns:1fr}button{width:100%;margin-right:0}.button-row{display:block}.chart-grid{grid-template-columns:1fr}}
 </style></head><body><main>
 <header><div><h1>Flower Pot testcode1</h1><div class="sub">Pump-test firmware. AP always stays on. Manual pump runs are capped in firmware.</div></div><div class="pill" id="versionPill">...</div></header>
-<div class="warn"><b>Pump unlocked:</b> use a dedicated 5 V supply or power bank, not a laptop USB port. Firmware caps each pump request at 2000 ms.</div>
+<div class="warn"><b>Pump unlocked:</b> use a dedicated 5 V supply or power bank, not a laptop USB port. Firmware caps each pump request at 10 seconds.</div>
 
 <section class="panel">
 <h2>Manual Controls</h2>
 <div class="control-grid">
   <div>
-    <label for="pumpDuration">Pump duration <span id="pumpDurationText">500 ms</span></label>
+    <label for="pumpDuration">Pump duration <span id="pumpDurationText">1000 ms</span></label>
     <div class="duration-row">
-      <input id="pumpDuration" type="range" min="250" max="2000" step="250" value="500">
-      <input id="pumpDurationNumber" type="number" min="250" max="2000" step="50" value="500">
+      <input id="pumpDuration" type="range" min="100" max="10000" step="100" value="1000">
+      <input id="pumpDurationNumber" type="number" min="100" max="10000" step="100" value="1000">
     </div>
-    <div class="tiny">The page lets you choose the pulse, but firmware still refuses anything over 2000 ms.</div>
+    <div class="tiny">Choose any pulse from 100 ms through 10 seconds. The firmware-enforced 10-second limit cannot be bypassed by the page.</div>
   </div>
   <div class="button-row"><button class="pump" id="pumpBtn" onclick="runPump()">Run pump</button></div>
 </div>
@@ -1061,8 +1064,8 @@ function bandClass(v){return String(v||'starting').replace(/ /g,'-')}
 function ms(v){return Math.max(0,Math.ceil(Number(v||0)))+' ms'}
 function bytes(v){v=Number(v||0);if(v>1048576)return (v/1048576).toFixed(1)+' MB';if(v>1024)return (v/1024).toFixed(1)+' KB';return v+' B'}
 function clamp(v,min,max){return Math.min(max,Math.max(min,Number.isFinite(v)?v:min))}
-function pumpMax(){return Number(latestStatus&&latestStatus.pump_max_runtime_ms)||2000}
-function selectedDuration(){const max=pumpMax();return Math.round(clamp(Number($('pumpDurationNumber').value),250,max))}
+function pumpMax(){return Number(latestStatus&&latestStatus.pump_max_runtime_ms)||10000}
+function selectedDuration(){const max=pumpMax();return Math.round(clamp(Number($('pumpDurationNumber').value),100,max))}
 function syncPumpInputs(source){
   const max=pumpMax();
   const range=$('pumpDuration');
@@ -1434,6 +1437,14 @@ void setup() {
   digitalWrite(PIN_ERROR_LED, LED_OFF);
   digitalWrite(PIN_STATUS_LED, LED_OFF);
 
+  // The rail is already gone during a brownout, so report it immediately on
+  // the following boot while the pump remains forced off.
+  if (bootResetReason == ESP_RST_BROWNOUT) {
+    digitalWrite(PIN_ERROR_LED, LED_ON);
+    delay(1000);
+    digitalWrite(PIN_ERROR_LED, LED_OFF);
+  }
+
   pinMode(PIN_RESERVOIR_SW, INPUT_PULLUP);
   pinMode(PIN_FLOW_PULSE, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(PIN_FLOW_PULSE), onFlowPulse, FALLING);
@@ -1451,7 +1462,7 @@ void setup() {
   Serial.print(FIRMWARE_NAME);
   Serial.print(" ");
   Serial.println(FIRMWARE_VERSION);
-  Serial.println("Pump test is enabled with a 2000 ms firmware cap.");
+  Serial.println("Pump control is enabled with a 10000 ms firmware cap.");
   Serial.print("Reset reason: ");
   Serial.println(resetReasonName(bootResetReason));
 
